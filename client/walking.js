@@ -34,6 +34,8 @@ export class WalkingTracker {
   }
   orient(orientation, t, record = true) {
     if (record) this.orientations.push({ t, ...structuredClone(orientation) });
+    if (this.lastOrientationTime !== undefined && t < this.lastOrientationTime - 0.0001) return;
+    this.lastOrientationTime = t;
     this.attitude.update({ orientation, gyro: null, yawRate: 0, dt: 0 }, null, 'Standing');
     this.attitudeOffset ??= this.heading.deviceYaw;
     // Orange is the relative sensor heading, without jump rejection,
@@ -63,7 +65,16 @@ export class WalkingTracker {
     this.raw.push(structuredClone(raw));
     const s = this.preprocessor.process(raw);
     this.heading.update(s, null, 'Standing');
-    if (s.orientation) this.orient(s.orientation, s.t, false);
+    if (s.orientation) {
+      const orientationTime = s.t - (s.orientationAge ?? 0);
+      // A motion event may carry the previous orientation reading. Never
+      // rewind current gyro rotation with that old reading.
+      if (
+        this.lastOrientationTime === undefined ||
+        orientationTime > this.lastOrientationTime + 0.0001
+      )
+        this.orient(s.orientation, orientationTime, false);
+    }
     const peaks = this.detector.update(s);
     this.history.push({
       t: s.t,
@@ -77,7 +88,7 @@ export class WalkingTracker {
       confirmedSteps: peaks.map((p) => p.t),
     });
     for (const peak of peaks) {
-      const atStep = this.history.findLast((p) => p.t <= peak.t && p.nav !== undefined);
+      const atStep = this.history.findLast((p) => p.t <= peak.t && Number.isFinite(p.phoneHeading));
       const phone = atStep?.phoneHeading ?? this.heading.deviceYaw;
       this.state.steps++;
       if (!this.drawing) continue;

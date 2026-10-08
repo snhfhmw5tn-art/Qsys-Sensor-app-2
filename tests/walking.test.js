@@ -179,3 +179,20 @@ test('orange state remains phone-based without calculated route', () => {
     ),
   );
 });
+
+test('stale orientation carried by motion samples cannot rewind a rapid gyro turn', () => {
+  const tracker = new WalkingTracker({ stepLength: 0.76 });
+  const orientation = { alpha: 0, beta: 0, gamma: 0 };
+  tracker.orient(orientation, 0);
+  const raw = { gravityAcceleration: [0, 0, 9.80665], linearAcceleration: [0, 0, 0], orientation };
+  tracker.process({ ...raw, t: 0, gyro: [0, 0, 0], orientationAge: 0 });
+  tracker.detector = { update: () => [{ t: 0.1 }], features: null };
+  tracker.process({ ...raw, t: 0.1, gyro: [0, 0, -900], orientationAge: 0.1 });
+  assert.ok(Math.abs(tracker.state.deviceHeading - 90) < 1e-8);
+  assert.ok(Math.abs(tracker.state.phoneX - 0.76) < 1e-8);
+  assert.ok(Math.abs(tracker.state.phoneY) < 1e-8);
+  tracker.orient({ ...orientation, alpha: 270 }, 0.11);
+  tracker.detector = { update: () => [], features: null };
+  tracker.process({ ...raw, t: 0.12, gyro: [0, 0, 0], orientationAge: 0.12 });
+  assert.ok(Math.abs(tracker.state.deviceHeading - 90) < 1e-8);
+});
