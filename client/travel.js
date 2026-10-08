@@ -28,15 +28,12 @@ export class CompensatedRoute {
     this.motion = 'waiting';
     this.normalEnergy = null;
     this.lastAnalysis = -Infinity;
-    this.navigationReference = null;
   }
   resetEvidence() {
     this.evidence = [];
     this.samples = [];
     this.lastAnalysis = -Infinity;
     this.reference = null;
-    this.navigationReference = null;
-    this.normalAnchor = null;
     this.last = null;
     this.pending = null;
     this.phoneWindow = [];
@@ -139,9 +136,7 @@ export class CompensatedRoute {
     };
   }
   update(f, phone, t, footfalls = [], sample = null) {
-    this.heading = this.normalAnchor
-      ? wrap(this.normalAnchor.heading + wrap(phone - this.normalAnchor.phone))
-      : wrap(phone - this.offset);
+    this.heading = wrap(phone - this.offset);
     this.phoneWindow.push({ t, phone });
     this.phoneWindow = this.phoneWindow.filter((p) => p.t >= t - 0.5);
     this.footfalls.push(...footfalls.map((p) => p.t));
@@ -202,7 +197,6 @@ export class CompensatedRoute {
     const uncertainty = (Math.acos(Math.min(1, mean.agreement)) * 180) / Math.PI;
     if (!this.reference) {
       this.reference = { phone, axis: mean.axis, uncertainty, t };
-      this.navigationReference ??= { axis: mean.axis, heading: wrap(phone - this.offset) };
       this.status = 'following';
       return;
     }
@@ -241,7 +235,6 @@ export class CompensatedRoute {
       };
       this.events.push(event);
       this.offset = event.newOffset;
-      this.normalAnchor = null;
       this.rebuild();
     }
     this.reference = { phone, axis: mean.axis, uncertainty, t };
@@ -263,65 +256,14 @@ export class CompensatedRoute {
     return wrap(phone - offset);
   }
   append(t, phone, distance) {
-    const previous = this.steps.at(-1);
-    const step = { t, phone, distance, motion: 'provisional' };
-    const decision = this.decisions.findLast((d) => d.t <= t);
-    const duration = previous ? t - previous.t : (decision?.period ?? 0.5);
-    const rows = this.samples.filter((p) => p.t >= t - duration && p.t <= t);
-    if (
-      this.navigationReference &&
-      decision?.motion === 'normal' &&
-      rows.length >= 8 &&
-      duration <= 1.2 &&
-      rows.every((p) => p.orientationReliable)
-    ) {
-      // RMPCA stage: project first, then PCA over each actual walking step.
-      const average = (fn) => rows.reduce((sum, row) => sum + fn(row), 0) / rows.length;
-      const mx = average((p) => p.nav[0]),
-        my = average((p) => p.nav[1]);
-      const xx = average((p) => (p.nav[0] - mx) ** 2),
-        yy = average((p) => (p.nav[1] - my) ** 2),
-        xy = average((p) => (p.nav[0] - mx) * (p.nav[1] - my));
-      const quality = Math.hypot(xx - yy, 2 * xy) / (xx + yy + 1e-6);
-      if (quality >= 0.5 && xx + yy >= 0.012) {
-        const axis = wrap(90 - (Math.atan2(2 * xy, xx - yy) * 90) / Math.PI);
-        let target = wrap(
-          this.navigationReference.heading + axial(axis - this.navigationReference.axis),
-        );
-        const predicted = this.headingAt(t, phone);
-        if (Math.abs(wrap(target - predicted)) > 90) target = wrap(target + 180);
-        // Continuity chooses an axis branch but cannot prove a true reversal.
-        if (Math.abs(wrap(target - predicted)) <= 45) {
-          step.estimate = target;
-          step.motion = 'normal';
-          step.quality = quality;
-        }
-      }
-    } else if (decision) step.motion = decision.motion;
+    // The reference step's phone heading is the only route input. Gait PCA
+    // may confirm a grip correction, but must never steer individual steps.
+    const step = { t, phone, distance };
     this.steps.push(step);
     this.appendPoint(step);
-    if (Number.isFinite(step.estimate)) {
-      this.normalAnchor = { phone, heading: step.estimate };
-      this.heading = wrap(step.estimate + wrap((this.phoneWindow.at(-1)?.phone ?? phone) - phone));
-    }
-    // Neighboring normal steps reject a single isolated heading outlier.
-    const [a, b, c] = this.steps.slice(-3);
-    if (
-      a?.motion === 'normal' &&
-      b?.motion === 'normal' &&
-      c?.motion === 'normal' &&
-      [a.estimate, b.estimate, c.estimate].every(Number.isFinite) &&
-      Math.abs(wrap(a.estimate - c.estimate)) < 12 &&
-      Math.abs(wrap(b.estimate - a.estimate)) > 25 &&
-      Math.abs(wrap(b.estimate - c.estimate)) > 25
-    ) {
-      b.estimate = wrap(a.estimate + wrap(c.estimate - a.estimate) / 2);
-      b.filtered = true;
-      this.rebuild();
-    }
   }
   appendPoint(step) {
-    const h = step.estimate ?? this.headingAt(step.t, step.phone),
+    const h = this.headingAt(step.t, step.phone),
       last = this.trajectory.at(-1);
     this.trajectory.push({
       x: last.x + this.stepLength * Math.sin(radians(h)),
@@ -338,7 +280,7 @@ export class CompensatedRoute {
   }
   exportHistory() {
     return {
-      model: 'deng-2018-browser-adaptation-v1',
+      model: 'orange-route-with-confirmed-grip-offset-v2',
       motion: this.motion,
       decisions: this.decisions,
       offset: this.offset,
@@ -347,7 +289,6 @@ export class CompensatedRoute {
       pending: this.pending,
       corrections: this.events,
       stepEstimates: this.steps,
-      navigationReference: this.navigationReference,
     };
   }
 }

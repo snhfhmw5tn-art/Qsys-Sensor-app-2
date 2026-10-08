@@ -32,3 +32,7 @@ The orange route, step detector, stride, orange markers and map coordinate syste
 Automated tests cover raw two-step window decisions, a 37-degree grip change while walking straight, retrospective reconstruction, a continuing 90-degree turn, isolated disturbances, ambiguous reversals and evidence reset after a sensor gap. These are synthetic regression tests, not measured walking accuracy.
 
 Before claiming improved real-world accuracy, replay labeled recordings with known straight segments, partial/90/180-degree turns and independently changed phone poses; measure heading error, route error, false corrections and decision delay. Compare against the same unchanged orange baseline. Test simultaneous turns and grip changes separately. Existing recordings without labeled ground truth cannot establish exact accuracy.
+
+## Correction after walking feedback
+
+The per-step PCA steering stage was removed: it could make green diverge from orange even without a phone repositioning. Green now integrates exactly the same phone headings and stride as orange, subtracting only a confirmed grip offset. Window PCA remains diagnostic evidence for offset confirmation, not an independent heading source. This supersedes the earlier per-step PCA description above. The arrow uses the same compensated heading. Regression tests require exact point-for-point equivalence through a body turn before any grip correction, and no route drift when the gait axis fluctuates with fixed phone heading.

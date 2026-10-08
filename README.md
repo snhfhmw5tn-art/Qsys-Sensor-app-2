@@ -26,7 +26,7 @@ Knappen Spara till fil på servern vid kartan sparar sensorhistoriken sedan sena
 
 ## Current green estimator (2026-10-08)
 
-The calculated green line and arrow use a browser adaptation of Deng et al. (2018): navigation-frame acceleration, per-step horizontal PCA during normal gait, overlapping two-step motion-classification windows, gyro-supported turns and retrospective mounting compensation. Sensor exports include window decisions and individual step estimates. Orange integration and its markers remain unchanged.
+The calculated green line and arrow use a browser adaptation of Deng et al. (2018): the unchanged orange step headings plus a separately confirmed grip offset. Navigation-frame acceleration and overlapping two-step motion-classification windows are used only to confirm grip changes, never to steer normal steps. Confirmed offsets retrospectively redraw green. Sensor exports include window decisions and individual step estimates. Orange integration and its markers remain unchanged.
 
 The adaptation is not the paper's complete sensor stack: browser attitude replaces its magnetometer/EKF pipeline, carrying states use experimental thresholds instead of a trained classifier, and PCA sign selection uses heading continuity rather than a pocket-specific phase model. Simultaneous turns and grip changes remain difficult. Synthetic regression tests do not establish real walking accuracy.
 

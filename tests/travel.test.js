@@ -94,7 +94,7 @@ test('raw two-step windows classify an arbitrary phone rotation and redraw green
   assert.ok(p.decisions.some((d) => d.motion === 'position-transition'));
   assert.ok(Math.abs(p.offset - 37) < 0.01);
   assert.ok(Math.abs(p.trajectory.at(-1).x) < 0.1);
-  assert.equal(p.exportHistory().model, 'deng-2018-browser-adaptation-v1');
+  assert.equal(p.exportHistory().model, 'orange-route-with-confirmed-grip-offset-v2');
   assert.ok(p.decisions.every((d) => Math.abs(d.seconds - 2 * d.period) < 1e-8));
 });
 test('a continuing raw gyro turn is accepted without waiting for the phone to settle', () => {
@@ -119,13 +119,29 @@ test('a sensor gap discards stale reference and classification windows', () => {
   assert.equal(p.pending, null);
 });
 
-test('normal per-step PCA can measure a changed gait axis independently of phone yaw', () => {
+test('gait-axis fluctuations cannot steer green away from the orange reference', () => {
   const p = new CompensatedRoute(0.76);
   rawWalk(p, 10, (t) => ({ axis: t < 4 ? 20 : 35, phone: 0 }));
-  assert.ok(
-    p.steps.some((step) => step.motion === 'normal' && Math.abs(step.estimate - 15) < 0.01),
-  );
-  assert.ok(Math.abs(p.heading - 15) < 0.01);
   assert.equal(p.offset, 0);
-  assert.ok(p.trajectory.at(-1).x > 1);
+  assert.equal(p.heading, 0);
+  assert.equal(p.events.length, 0);
+  assert.equal(p.trajectory.at(-1).x, 0);
+  assert.ok(p.trajectory.every((point) => point.x === 0));
+});
+test('without confirmed grip compensation green reproduces every orange step exactly', () => {
+  const p = new CompensatedRoute(0.76);
+  rawWalk(p, 12, (t) => {
+    const phone = t < 4 ? 0 : t < 8 ? (t - 4) * 22.5 : 90;
+    return { axis: 20 + phone, phone, rate: t >= 4 && t < 8 ? 22.5 : 0 };
+  });
+  assert.equal(p.events.length, 0);
+  let x = 0,
+    y = 0;
+  p.steps.forEach((step, i) => {
+    x += 0.76 * Math.sin((step.phone * Math.PI) / 180);
+    y += 0.76 * Math.cos((step.phone * Math.PI) / 180);
+    assert.equal(p.trajectory[i + 1].x, x);
+    assert.equal(p.trajectory[i + 1].y, y);
+    assert.equal(p.trajectory[i + 1].heading, step.phone);
+  });
 });
