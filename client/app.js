@@ -34,17 +34,16 @@ const map = new LocalMapRenderer($('map'));
 function render() {
   const s = tracker.state;
   const analysis = tracker.travel.diagnostics(s.deviceHeading);
-  const candidateAngle = analysis.calculatedRelativePhone ?? s.heading - s.deviceHeading;
-  $('zeroArrow').setAttribute(
-    'transform',
-    'rotate(' + analysis.zeroReferenceRelativePhone + ' 110 110)',
-  );
+  // Sensor-relative angles have the opposite handedness to the front-facing SVG.
+  const zeroAngle = -analysis.zeroReferenceRelativePhone;
+  const candidateAngle = -(analysis.calculatedRelativePhone ?? s.heading - s.deviceHeading);
+  $('zeroArrow').setAttribute('transform', 'rotate(' + zeroAngle + ' 110 110)');
   $('directionArrow').setAttribute('transform', 'rotate(' + candidateAngle + ' 110 110)');
   $('directionArrow').setAttribute(
     'stroke-dasharray',
     analysis.state === 'confirmed' ? 'none' : '5 4',
   );
-  $('zeroAngle').textContent = Math.round(analysis.zeroReferenceRelativePhone) + '°';
+  $('zeroAngle').textContent = Math.round(zeroAngle) + '°';
   $('candidateAngle').textContent = Math.round(candidateAngle) + '°';
   const states = {
     waiting: 'Inväntar gångdata.',
