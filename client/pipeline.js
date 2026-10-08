@@ -130,7 +130,8 @@ export class MotionFeatureExtractor extends IMotionFeatureExtractor {
     const angle = 0.5 * Math.atan2(2 * xy, xx - yy),
       anisotropy = Math.hypot(xx - yy, 2 * xy) / (xx + yy + 1e-6);
     // Resample irregular browser events before computing autocorrelation.
-    const uniform = [];
+    const uniform = [],
+      rawVertical = [];
     let j = 0;
     for (let t = first.t; t <= last.t; t += 1 / C.featureSampleRate) {
       while (j + 1 < samples.length && samples[j + 1].t < t) j++;
@@ -138,6 +139,7 @@ export class MotionFeatureExtractor extends IMotionFeatureExtractor {
         b = samples[Math.min(j + 1, samples.length - 1)],
         k = b.t === a.t ? 0 : (t - a.t) / (b.t - a.t);
       uniform.push(a.vertical + k * (b.vertical - a.vertical));
+      rawVertical.push(a.nav[2] + k * (b.nav[2] - a.nav[2]));
     }
     const m = mean(uniform),
       center = uniform.map((x) => x - m);
@@ -162,8 +164,34 @@ export class MotionFeatureExtractor extends IMotionFeatureExtractor {
         bestLag = lag;
       }
     }
+    // Windowed spectrum of gravity-corrected, unfiltered vertical acceleration.
+    const sampleRate = (samples.length - 1) / (last.t - first.t);
+    const rawMean = mean(rawVertical);
+    let spectralTotal = 0,
+      spectralHigh = 0,
+      spectralPeak = 0,
+      verticalFrequency = 0;
+    for (let hz = 0.5; hz <= Math.min(15, sampleRate * 0.4); hz += 0.5) {
+      let re = 0,
+        im = 0;
+      rawVertical.forEach((x, i) => {
+        const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (rawVertical.length - 1));
+        const phase = (2 * Math.PI * hz * i) / C.featureSampleRate;
+        re += (x - rawMean) * w * Math.cos(phase);
+        im += (x - rawMean) * w * Math.sin(phase);
+      });
+      const power = re * re + im * im;
+      spectralTotal += power;
+      if (hz >= 4) spectralHigh += power;
+      if (power > spectralPeak) {
+        spectralPeak = power;
+        verticalFrequency = hz;
+      }
+    }
     const energy = mean(v.map((x) => x * x));
     return {
+      verticalFrequency: spectralTotal > 1e-8 ? verticalFrequency : 0,
+      verticalHighFrequencyRatio: spectralTotal > 1e-8 ? spectralHigh / spectralTotal : 0,
       rms: Math.sqrt(mean(norm.map((x) => x * x))),
       variance: variance(v),
       standardDeviation: Math.sqrt(variance(v)),

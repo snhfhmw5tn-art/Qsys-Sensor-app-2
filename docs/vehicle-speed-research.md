@@ -1,0 +1,14 @@
+# Experimental vehicle speed, 2026-10-08
+
+The previous estimator integrated both navigation-plane acceleration components and used their velocity norm. Unmodelled lateral acceleration could therefore increase reported speed in a turn.
+
+The replacement uses a fixed-mount, planar, no-sideslip longitudinal model. A sustained initial horizontal acceleration (200 ms, low yaw) establishes the forward axis in the navigation frame; gravity-corrected navigation yaw rotates that axis thereafter. Only acceleration projected onto that axis changes scalar forward speed. Lateral acceleration and the predicted centripetal term are exported as diagnostics. The numerical bound is 20 m/s, not a calibrated vehicle speed limit. Reverse driving requires a new initialization. Initial speed is assumed zero. Starting an already moving recording, moving the handset on the vehicle, slopes/attitude errors and IMU bias can invalidate the estimate. Quiet acceleration does not imply stopped. There is no GPS, wheel-speed input, trained network or claimed drift-free speed measurement.
+
+Research basis:
+- https://www.mdpi.com/1996-1073/12/7/1242 (2019), equations 4-7: separate longitudinal/lateral rigid-body kinematics and yaw coupling. Its complete estimator additionally uses wheel encoders and steering measurements; those corrections are unavailable here. Our reduced no-sideslip model is not a reproduction of its reported accuracy.
+- https://www.mdpi.com/1424-8220/17/2/305 (2017): measured vehicle vibration/roughness depends on speed and mechanical coupling. There is no universal vertical-frequency-to-speed conversion.
+- https://arxiv.org/abs/2401.07468 (CarSpeedNet, version 4, 2026): speed-dependent acceleration histories can support learned estimates, but require representative training and reference-speed labels. No pretrained model is included here.
+
+Vertical diagnostics use a Hann-windowed spectrum of unfiltered gravity-corrected navigation Z, 0.5 Hz bins up to min(15 Hz, 0.4 * measured sample rate), after uniform resampling. Dominant vertical frequency and the power fraction above 4 Hz are saved with every feature window. A high-frequency-dominated signal vetoes the existing heuristic gait candidate; frequency alone never establishes walking or speed. Periodicity, amplitude, horizontal energy and plausible cadence are still required. Low-frequency cart vibrations can still resemble gait, so labeled cart/truck/walk/run tests remain necessary.
+
+Recognized gait takes precedence over transport selections and retained vehicle-motion evidence. Vehicle test sessions still disable steps and stride unconditionally. The operator-requested rule estimates over 35 km/h as Forklift, immediately, even above gait evidence. That rule uses an uncertain inertial estimate and is not a statistically calibrated probability. The orange direction reference is unchanged; only vehicle distance and activity classification change.

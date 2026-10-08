@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ActivityEstimator } from '../client/activity.js';
 import { VehicleDistance } from '../client/vehicle.js';
+import { MotionFeatureExtractor } from '../client/pipeline.js';
 import { WalkingTracker } from '../client/walking.js';
 const quiet = {
   sampleRate: 50,
@@ -108,4 +109,76 @@ test('vehicle distance is independent of configured stride even with detected fo
   assert.equal(trackers[0].state.distance, trackers[1].state.distance);
   assert.deepEqual(trackers[0].state.phoneTrajectory, trackers[1].state.phoneTrajectory);
   assert.ok(trackers[0].exportHistory().derived.at(-1).vehicle.experimental);
+});
+
+test('centripetal acceleration in either turn does not increase speed', () => {
+  for (const sign of [-1, 1]) {
+    const vehicle = new VehicleDistance();
+    for (let i = 0; i <= 100; i++) vehicle.update(sample(i / 50, 1));
+    for (let i = 101; i <= 150; i++) vehicle.update(sample(i / 50, 0));
+    const before = vehicle.speed;
+    const yaw = (sign * Math.PI) / 4;
+    for (let i = 151; i <= 350; i++) {
+      const middle = vehicle.heading - (yaw * 0.02) / 2;
+      const lateral = -vehicle.speed * yaw;
+      vehicle.update({
+        t: i / 50,
+        orientationReliable: true,
+        yawRate: sign * 45,
+        nav: [lateral * Math.cos(middle), -lateral * Math.sin(middle), 0],
+      });
+    }
+    assert.ok(Math.abs(vehicle.speed - before) < 0.03);
+  }
+});
+test('gait takes precedence over vehicle selection and coasting; over 35 km/h is truck', () => {
+  const gait = {
+    ...quiet,
+    rms: 1,
+    periodicity: 0.9,
+    verticalAmplitude: 2,
+    horizontalEnergy: 0.2,
+    cadence: 2,
+  };
+  for (const transport of ['Auto', 'Cart', 'Forklift']) {
+    const estimator = new ActivityEstimator();
+    assert.equal(estimator.update(gait, 0, transport, true, 2).mode, 'Walking');
+    const fast = estimator.update(gait, 0.02, transport, true, 10);
+    assert.equal(fast.mode, 'Forklift');
+    assert.equal(fast.reason, 'user-rule-estimated-speed-over-35-kmh');
+    assert.equal(estimator.update(gait, 0.04, transport, true, 2).mode, 'Walking');
+  }
+});
+test('high-frequency mechanical vibration alone is not classified as walking', () => {
+  const f = {
+    ...quiet,
+    rms: 1,
+    periodicity: 0.9,
+    verticalAmplitude: 2,
+    horizontalEnergy: 0.2,
+    cadence: 2,
+    verticalHighFrequencyRatio: 0.9,
+  };
+  assert.equal(new ActivityEstimator().update(f, 0, 'Cart').mode, 'Cart');
+});
+
+test('vertical spectrum separates 2 Hz gait-band and 8 Hz vibration signals', () => {
+  for (const hz of [2, 8]) {
+    const samples = Array.from({ length: 101 }, (_, i) => {
+      const z = Math.sin((2 * Math.PI * hz * i) / 50);
+      return {
+        t: i / 50,
+        dt: 0.02,
+        nav: [0, 0, z],
+        vertical: z,
+        norm: Math.abs(z),
+        gyroMagnitude: 0,
+        yawRate: 0,
+        orientationReliable: true,
+      };
+    });
+    const f = new MotionFeatureExtractor().extract(samples);
+    assert.equal(f.verticalFrequency, hz);
+    assert.ok(hz === 8 ? f.verticalHighFrequencyRatio > 0.9 : f.verticalHighFrequencyRatio < 0.1);
+  }
 });

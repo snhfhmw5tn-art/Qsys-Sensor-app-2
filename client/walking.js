@@ -92,10 +92,12 @@ export class WalkingTracker {
       s.t,
       this.transportType,
       this.wasVehicle && this.vehicle.speed > 0.1,
+      this.wasVehicle ? this.vehicle.speed : 0,
     );
     const vehicle =
       ['Cart', 'Forklift', 'VehicleUnknown'].includes(this.state.activity.mode) ||
-      ['Cart', 'Forklift'].includes(this.transportType);
+      (['Cart', 'Forklift'].includes(this.transportType) &&
+        (!this.countSteps || !['Walking', 'Running'].includes(this.state.activity.mode)));
     if (vehicle !== this.wasVehicle) this.vehicle.reset();
     const vehicleEstimate = vehicle ? this.vehicle.update(s, this.transportType) : null;
     this.wasVehicle = vehicle;

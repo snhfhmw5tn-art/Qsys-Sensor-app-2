@@ -13,13 +13,19 @@ export class ActivityEstimator {
     this.candidate = null;
     this.since = 0;
   }
-  update(f, t, transport = 'Auto', vehicleMoving = false) {
+  update(f, t, transport = 'Auto', vehicleMoving = false, speed = 0) {
     if (!f || f.sampleRate < 15) return this.current;
-    if (f === this.last && transport === this.transport) return this.current;
+    const highSpeed = Number.isFinite(speed) && speed > 35 / 3.6;
     this.last = f;
     this.transport = transport;
     const quiet = f.rms < 0.2 && f.gyroRms < 5;
-    const gait = f.periodicity >= 0.48 && f.verticalAmplitude >= 1.1 && f.horizontalEnergy >= 0.012;
+    const gait =
+      f.periodicity >= 0.48 &&
+      f.verticalAmplitude >= 1.1 &&
+      f.horizontalEnergy >= 0.012 &&
+      f.cadence >= 0.8 &&
+      f.cadence <= 3.8 &&
+      (f.verticalHighFrequencyRatio ?? 0) < 0.65;
     const running = gait && f.cadence >= 2.5 && f.rms >= 2;
     const vehicle = !gait && f.horizontalEnergy >= 0.08 && f.periodicity < 0.4;
     let scores = quiet
@@ -50,7 +56,7 @@ export class ActivityEstimator {
               Forklift: 0.1,
               Unknown: 0.4,
             };
-    if (vehicleMoving && transport === 'Auto')
+    if (!gait && vehicleMoving && transport === 'Auto')
       scores = {
         Standing: 0.15,
         Walking: 0.05,
@@ -59,7 +65,7 @@ export class ActivityEstimator {
         Forklift: 0.24,
         Unknown: 0.3,
       };
-    if (['Cart', 'Forklift'].includes(transport) && (!quiet || vehicleMoving)) {
+    if (!gait && ['Cart', 'Forklift'].includes(transport) && (!quiet || vehicleMoving)) {
       scores = {
         Standing: quiet ? 0.25 : 0.08,
         Walking: 0.05,
@@ -70,13 +76,19 @@ export class ActivityEstimator {
         [transport]: quiet ? 0.55 : 0.65,
       };
     }
+    if (highSpeed)
+      scores = { Standing: 0, Walking: 0, Running: 0, Cart: 0, Forklift: 1, Unknown: 0 };
+    if (gait && !highSpeed) {
+      scores.Cart = 0;
+      scores.Forklift = 0;
+    }
     const total = Object.values(scores).reduce((a, b) => a + b, 0);
     const probabilities = Object.fromEntries(
       Object.entries(scores).map(([key, value]) => [key, value / total]),
     );
     let mode = Object.keys(probabilities).sort((a, b) => probabilities[b] - probabilities[a])[0];
     let probability = probabilities[mode];
-    if (transport === 'Auto' && (vehicle || vehicleMoving)) {
+    if (!highSpeed && !gait && transport === 'Auto' && (vehicle || vehicleMoving)) {
       mode = 'VehicleUnknown';
       probability = probabilities.Cart + probabilities.Forklift;
     }
@@ -96,6 +108,8 @@ export class ActivityEstimator {
     // Require persistent evidence; the displayed percentage always belongs to
     // the displayed activity, even while a new candidate is being confirmed.
     if (
+      highSpeed ||
+      (gait && ['Cart', 'Forklift', 'VehicleUnknown'].includes(this.current.mode)) ||
       this.current.mode === 'Unknown' ||
       t - this.since >= 0.7 ||
       transport !== this.current.transport
@@ -108,6 +122,11 @@ export class ActivityEstimator {
         transport,
         source: transport === 'Auto' ? 'sensors' : 'sensors-and-selected-transport',
         calibrated: false,
+        reason: highSpeed
+          ? 'user-rule-estimated-speed-over-35-kmh'
+          : gait
+            ? 'persistent-gait-pattern'
+            : 'heuristic',
       };
     } else {
       this.current = {
