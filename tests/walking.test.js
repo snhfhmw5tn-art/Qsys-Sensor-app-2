@@ -291,3 +291,17 @@ test('unreliable gait cannot change mounting offset or suppress phone turns', as
   assert.equal(p.heading, 73);
   assert.equal(p.confidence, 0.2);
 });
+
+test('mounting correction uses a 700ms window and tolerates small gait-axis changes with a large grip rotation', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  let t = 0;
+  for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
+  const start = t;
+  for (let i = 0; i < 9; i++, t += 0.1) p.update(gaitFeature(0), -78, t);
+  assert.ok(p.corrections.length > 0);
+  assert.ok(p.corrections[0].end - start <= 0.8);
+  assert.ok(Math.abs(p.heading) < 1e-8);
+  assert.ok(Math.abs(p.offset + 78) < 1e-8);
+  assert.ok(p.evidence.every((point) => point.t >= t - 0.8));
+});

@@ -81,6 +81,7 @@ export class WalkingTracker {
       greenDirection: {
         confidence: this.travel.confidence,
         model: 'phone-heading-with-gait-mounting-offset',
+        adjustmentWindowMs: 700,
         mountingOffset: this.travel.offset,
         reference: this.travel.reference,
         turn: this.travel.turn,
@@ -279,7 +280,7 @@ export class TravelDirection {
       this.phoneWindow.length > 1 &&
       t - this.phoneWindow[0].t >= 0.4 &&
       this.phoneWindow.every((p) => Math.abs(wrap(p.phone - phone)) < 8);
-    if (this.reference && !this.turn && Math.abs(wrap(phone - this.reference.phone)) > 6) {
+    if (this.reference && !this.turn && Math.abs(wrap(phone - this.reference.phone)) > 10) {
       this.turn = {
         start: Math.max(0, t - 0.3),
         basePhone: this.reference.phone,
@@ -298,15 +299,15 @@ export class TravelDirection {
       f.anisotropy >= 0.4 &&
       f.horizontalEnergy >= 0.012;
     if (!reliable) {
-      this.evidence = [];
+      this.evidence = this.evidence.filter((p) => p.t >= t - 0.7);
       this.confidence = 0.2;
       return this.heading;
     }
     this.evidence.push({ t, axis: f.pcaHeading });
-    this.evidence = this.evidence.filter((p) => p.t >= t - 2);
+    this.evidence = this.evidence.filter((p) => p.t >= t - 0.7);
     const mean = axisMean(this.evidence);
     const stable =
-      this.evidence.length >= 12 && t - this.evidence[0].t >= 1.5 && mean.agreement > 0.94;
+      this.evidence.length >= 4 && t - this.evidence[0].t >= 0.5 && mean.agreement > 0.94;
     if (!quiet || !stable) {
       this.confidence = 0.2;
       return this.heading;
@@ -324,9 +325,8 @@ export class TravelDirection {
     }
     if (!this.turn) {
       // Learn normal gait variation only while the mounting reference is unchanged.
-      this.reference.axis = wrap(
-        this.reference.axis + 0.05 * axial(mean.axis - this.reference.axis),
-      );
+      this.reference.axis = mean.axis;
+
       this.reference.uncertainty = (Math.acos(Math.min(1, mean.agreement)) * 180) / Math.PI;
       this.confidence = 0.6;
       return this.heading;
@@ -339,11 +339,20 @@ export class TravelDirection {
     const ambiguous = Math.abs(rotation) > 120 && Math.abs(gaitRotation) < 30;
     if (!ambiguous && Math.abs(gaitRotation) < 12) gaitRotation = 0;
     else if (Math.abs(wrap(gaitRotation - rotation)) > 90) gaitRotation = wrap(gaitRotation + 180);
+    // Large grip rotations can slightly change the measured gait axis itself.
+    // When the gait evidence remains near forward, retain the prior forward reference.
+    if (
+      !ambiguous &&
+      Math.abs(rotation) > 45 &&
+      Math.abs(gaitRotation) < 30 &&
+      Math.abs(wrap(rotation - gaitRotation)) > 35
+    )
+      gaitRotation = 0;
     const mismatch = wrap(rotation - gaitRotation);
     if (
       !ambiguous &&
       Math.abs(mismatch) >
-        Math.max(8, turn.uncertainty, (Math.acos(Math.min(1, mean.agreement)) * 180) / Math.PI)
+        Math.max(12, turn.uncertainty, (Math.acos(Math.min(1, mean.agreement)) * 180) / Math.PI)
     ) {
       this.offset = wrap(turn.offset + mismatch);
       this.heading = wrap(phone - this.offset);
