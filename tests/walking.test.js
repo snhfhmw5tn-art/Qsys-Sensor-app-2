@@ -311,3 +311,39 @@ test('weak gait holds last safe direction even when phone turns', async () => {
   assert.ok(p.reference);
   assert.equal(p.heading, 0);
 });
+
+test('reference diagnostics distinguish pending orientation change from confirmed zero and export it', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  let t = 0;
+  assert.equal(p.diagnostics().lastConfirmedAt, null);
+  for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
+  assert.equal(p.diagnostics(0).state, 'confirmed');
+  p.update(gaitFeature(20), 37, t);
+  t += 0.1;
+  const pending = p.diagnostics(37);
+  assert.equal(pending.state, 'collecting');
+  assert.notEqual(pending.pendingSince, null);
+  assert.equal(pending.zeroReferenceRelativePhone, 0);
+  assert.equal(pending.calculatedRelativePhone, -37);
+  for (let i = 0; i < 10; i++, t += 0.1) p.update(gaitFeature(20), 37, t);
+  const confirmed = p.diagnostics(37);
+  assert.equal(confirmed.state, 'confirmed');
+  assert.equal(confirmed.pendingSince, null);
+  assert.equal(confirmed.zeroReferenceRelativePhone, -37);
+  assert.equal(confirmed.lastReferenceChange.zeroOffset, 37);
+  p.update({ ...gaitFeature(20), periodicity: 0 }, 37, t);
+  assert.equal(p.diagnostics(37).state, 'weak');
+  assert.equal(p.diagnostics(37).candidateHeading, null);
+  const tracker = new WalkingTracker();
+  tracker.process({
+    t: 0,
+    gravityAcceleration: [0, 0, 9.80665],
+    linearAcceleration: [0, 0, 0],
+    gyro: [0, 0, 0],
+    orientation: { alpha: 0, beta: 0, gamma: 0 },
+  });
+  const exported = JSON.parse(JSON.stringify(tracker.exportHistory()));
+  assert.ok(exported.derived.at(-1).directionAnalysis);
+  assert.ok(Array.isArray(exported.greenDirection.referenceChanges));
+});

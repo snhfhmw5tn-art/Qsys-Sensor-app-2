@@ -83,6 +83,8 @@ export class WalkingTracker {
         model: 'navigation-frame-gait-fixed-origin',
         adjustmentWindowMs: this.travel.adjustmentWindowMs,
         mountingOffset: this.travel.offset,
+        diagnostics: this.travel.diagnostics(this.heading.deviceYaw),
+        referenceChanges: this.travel.referenceChanges,
         reference: this.travel.reference,
         turn: this.travel.turn,
         corrections: this.travel.corrections,
@@ -107,6 +109,7 @@ export class WalkingTracker {
       phoneHeading: this.heading.deviceYaw,
       travelHeading: this.travel.heading,
       travelConfidence: this.travel.confidence,
+      directionAnalysis: this.travel.diagnostics(this.heading.deviceYaw),
       orientationHeading: this.heading.orientationYaw,
       yawRate: s.yawRate,
       vertical: s.vertical,
@@ -258,7 +261,35 @@ export class TravelDirection {
     this.corrections = [];
     this.turn = null;
     this.path = [];
+    this.zeroOffset = 0;
+    this.referenceChanges = [];
+    this.analysisState = 'waiting';
+    this.candidate = null;
+    this.lastConfirmedAt = null;
+    this.referencePendingSince = null;
     this.setAdjustmentWindow(adjustmentWindowMs);
+  }
+  diagnostics(phone = 0) {
+    const span = this.evidence.length > 1 ? this.evidence.at(-1).t - this.evidence[0].t : 0;
+    const required = (this.adjustmentWindowMs - 200) / 1000;
+    return {
+      state: this.analysisState,
+      pendingSince: this.referencePendingSince,
+      windowMs: this.adjustmentWindowMs,
+      progress:
+        this.analysisState === 'confirmed'
+          ? 1
+          : Math.min(1, span / required, this.evidence.length / 4),
+      zeroReferenceRelativePhone: wrap(-this.zeroOffset),
+      calculatedRelativePhone: this.candidate === null ? null : wrap(this.candidate - phone),
+      acceptedHeading: this.heading,
+      candidateHeading: this.candidate,
+      zeroOffset: this.zeroOffset,
+      lastConfirmedAt: this.lastConfirmedAt,
+      lastReferenceChange: this.referenceChanges.at(-1) ?? null,
+      confidence: this.confidence,
+      evidenceCount: this.evidence.length,
+    };
   }
   setAdjustmentWindow(ms) {
     if (!Number.isFinite(ms) || ms < 400 || ms > 5000)
@@ -266,17 +297,29 @@ export class TravelDirection {
     this.adjustmentWindowMs = ms;
     this.evidence = [];
     this.last = null;
+    this.analysisState = 'collecting';
   }
   resetEvidence() {
     // Preserve the map origin and last direction across a sensor dropout.
     this.evidence = [];
     this.previousAxis = null;
     this.last = null;
+    this.analysisState = 'waiting';
+    this.candidate = null;
     this.confidence = 0.2;
   }
   update(f, phone, t = this.time + 0.1) {
     this.time = t;
     this.offset = wrap(phone - this.heading);
+    if (
+      this.reference &&
+      this.referencePendingSince === null &&
+      Math.abs(wrap(this.offset - this.zeroOffset)) > 10
+    ) {
+      this.referencePendingSince = t;
+      this.evidence = [];
+      this.analysisState = 'collecting';
+    }
     if (!f || f === this.last) return this.heading;
     this.last = f;
     const reliable =
@@ -285,6 +328,8 @@ export class TravelDirection {
       f.anisotropy >= 0.4 &&
       f.horizontalEnergy >= 0.012;
     if (!reliable) {
+      this.analysisState = 'weak';
+      this.candidate = null;
       this.evidence = this.evidence.filter((p) => p.t >= t - this.adjustmentWindowMs / 1000);
       this.confidence = 0.2;
       return this.heading;
@@ -298,6 +343,8 @@ export class TravelDirection {
       // Reject discontinuous PCA flips rather than turning them into a body turn.
       if (Math.abs(delta) > 40) {
         this.evidence = [];
+        this.analysisState = 'rejected';
+        this.candidate = null;
         this.previousAxis = axis;
         this.confidence = 0.2;
         return this.heading;
@@ -308,24 +355,48 @@ export class TravelDirection {
     this.evidence.push({ t, axis, unwrapped: this.unwrappedAxis });
     this.evidence = this.evidence.filter((p) => p.t >= t - this.adjustmentWindowMs / 1000);
     const mean = axisMean(this.evidence);
+    const average = this.evidence.reduce((sum, p) => sum + p.unwrapped, 0) / this.evidence.length;
+    this.candidate = this.reference ? wrap(average - this.reference.axis) : null;
     const stable =
       this.evidence.length >= 4 &&
       t - this.evidence[0].t >= (this.adjustmentWindowMs - 200) / 1000 &&
       mean.agreement > 0.94;
     if (!stable) {
+      this.analysisState = 'collecting';
       this.confidence = 0.2;
       return this.heading;
     }
-    const average = this.evidence.reduce((sum, p) => sum + p.unwrapped, 0) / this.evidence.length;
+    this.analysisState = 'confirmed';
+    this.lastConfirmedAt = t;
+    this.referencePendingSince = null;
     if (!this.reference) {
       this.reference = { axis: average, heading: 0, t };
       this.path = [{ t, heading: 0 }];
+      this.candidate = 0;
+      this.zeroOffset = wrap(phone);
+      this.referenceChanges.push({
+        t,
+        zeroOffset: this.zeroOffset,
+        heading: 0,
+        phone,
+        reason: 'initial-gait',
+      });
       this.confidence = 0.6;
       return this.heading;
     }
     const target = wrap(average - this.reference.axis);
     if (Math.abs(wrap(target - this.heading)) > 2) this.heading = target;
     this.offset = wrap(phone - this.heading);
+    if (Math.abs(wrap(this.offset - this.zeroOffset)) > 2) {
+      this.zeroOffset = this.offset;
+      this.referenceChanges.push({
+        t,
+        zeroOffset: this.zeroOffset,
+        heading: this.heading,
+        phone,
+        reason: 'confirmed-gait',
+      });
+    }
     this.confidence = 0.6;
     // Feature extraction and the confirmation window lag the actual footfalls.
     const lag = 0.6 + this.adjustmentWindowMs / 2000;

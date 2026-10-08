@@ -56,7 +56,64 @@
         <div><b id="steps">0</b><span>steg</span></div>
         <div><b id="heading">0°</b><span>färdriktning</span></div>
       </section>
-      <div class="map-wrap">
+      <div class="controls view-tabs" aria-label="Välj vy">
+        <button id="showMap" aria-pressed="true">Karta</button>
+        <button id="showReference" aria-pressed="false">Referensvy</button>
+      </div>
+      <section
+        id="referenceView"
+        class="reference-view"
+        hidden
+        aria-label="Referens och färdriktning"
+      >
+        <h2>Referens och färdriktning</h2>
+        <p>
+          Telefonens överkant är uppåt i denna vy. Pilarna visar vinklar i förhållande till
+          telefonen.
+        </p>
+        <svg
+          viewBox="0 0 220 220"
+          role="img"
+          aria-label="Blå nollreferens och grön beräknad färdriktning"
+        >
+          <circle cx="110" cy="110" r="90" fill="none" stroke="#36515e" />
+          <path d="M110 15V30 M110 190V205 M15 110H30 M190 110H205" stroke="#67818f" />
+          <text x="110" y="12" text-anchor="middle" fill="#e8ac61" font-size="10">
+            TELEFONENS ÖVERKANT
+          </text>
+          <g id="zeroArrow" transform="rotate(0 110 110)">
+            <path
+              d="M110 110V44 M99 59L110 42L121 59"
+              fill="none"
+              stroke="#7eafff"
+              stroke-width="5"
+            />
+          </g>
+          <g id="directionArrow" transform="rotate(0 110 110)">
+            <path
+              d="M110 110V63 M103 74L110 61L117 74"
+              fill="none"
+              stroke="#56e2c9"
+              stroke-width="4"
+            />
+          </g>
+          <circle cx="110" cy="110" r="5" fill="#fff" />
+        </svg>
+        <p>
+          <span class="zero-legend">Blå: bekräftad nollreferens</span> <b id="zeroAngle">0°</b
+          ><br />
+          <span class="green">Grön: beräknad riktning</span> <b id="candidateAngle">0°</b>
+        </p>
+        <p id="analysisStatus" role="status">Inväntar gångdata.</p>
+        <label>Fönsterfyllnad <progress id="analysisProgress" max="1" value="0"></progress></label>
+        <p id="referenceTiming"></p>
+        <p class="note">
+          Blå uppdateras när gångdata bekräftar telefonens nya referens. Streckad grön pil är en
+          kandidat eller senaste bekräftade riktning vid svaga data. Vyn visar algoritmens
+          uppskattning.
+        </p>
+      </section>
+      <div class="map-wrap" id="mapView">
         <canvas id="map" aria-label="Gångspår med telefonens riktning"></canvas
         ><span class="map-label">STARTENS RIKTNING ↑ · METER</span>
       </div>

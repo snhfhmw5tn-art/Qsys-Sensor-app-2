@@ -171,3 +171,39 @@ details p {
 .calibration .controls {
   margin-top: 14px;
 }
+
+[hidden] {
+  display: none !important;
+}
+.view-tabs {
+  margin: 16px 0;
+}
+.view-tabs button[aria-pressed='true'] {
+  outline: 2px solid #56e2c9;
+  outline-offset: 2px;
+}
+.reference-view {
+  padding: 18px;
+  background: #192c39;
+  border: 1px solid #36515e;
+  border-radius: 12px;
+}
+.reference-view h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+}
+.reference-view svg {
+  display: block;
+  width: min(100%, 320px);
+  margin: 16px auto;
+}
+.reference-view p {
+  line-height: 1.6;
+}
+.zero-legend {
+  color: #7eafff;
+}
+.reference-view progress {
+  width: 100%;
+  accent-color: #56e2c9;
+}

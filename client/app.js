@@ -33,6 +33,37 @@ function archiveSegment(nextPhase) {
 const map = new LocalMapRenderer($('map'));
 function render() {
   const s = tracker.state;
+  const analysis = tracker.travel.diagnostics(s.deviceHeading);
+  const candidateAngle = analysis.calculatedRelativePhone ?? s.heading - s.deviceHeading;
+  $('zeroArrow').setAttribute(
+    'transform',
+    'rotate(' + analysis.zeroReferenceRelativePhone + ' 110 110)',
+  );
+  $('directionArrow').setAttribute('transform', 'rotate(' + candidateAngle + ' 110 110)');
+  $('directionArrow').setAttribute(
+    'stroke-dasharray',
+    analysis.state === 'confirmed' ? 'none' : '5 4',
+  );
+  $('zeroAngle').textContent = Math.round(analysis.zeroReferenceRelativePhone) + '°';
+  $('candidateAngle').textContent = Math.round(candidateAngle) + '°';
+  const states = {
+    waiting: 'Inväntar gångdata.',
+    collecting: 'Samlar gångdata för ny beräkning.',
+    weak: 'För svagt gångmönster. Ingen ny referens bekräftas.',
+    rejected: 'Avvikande gångaxel. Behåller senaste riktning.',
+    confirmed: 'Riktning beräknad och referens kontrollerad.',
+  };
+  $('analysisStatus').textContent =
+    (analysis.pendingSince !== null ? 'Ny nollreferens utreds. ' : '') +
+    (states[analysis.state] ?? states.waiting);
+  $('analysisProgress').value = analysis.progress;
+  $('referenceTiming').textContent =
+    'Analysfönster: ' +
+    analysis.windowMs +
+    ' ms · Senaste beräkning: ' +
+    (analysis.lastConfirmedAt === null ? 'ingen' : analysis.lastConfirmedAt.toFixed(1) + ' s') +
+    ' · Senaste nya nollreferens: ' +
+    (analysis.lastReferenceChange ? analysis.lastReferenceChange.t.toFixed(1) + ' s' : 'ingen');
   map.render({ ...s, markers: markers.filter((m) => m.segment === segments.length) });
   $('markDeviation').disabled = !tracker.drawing;
   $('distance').textContent = s.distance.toLocaleString('sv-SE', {
@@ -106,6 +137,25 @@ async function connectSensors() {
   }
 }
 $('permission').onclick = connectSensors;
+function selectView(reference) {
+  $('referenceView').hidden = !reference;
+  $('mapView').hidden = reference;
+  $('showMap').setAttribute('aria-pressed', String(!reference));
+  $('showReference').setAttribute('aria-pressed', String(reference));
+  render();
+}
+$('showMap').onclick = () => selectView(false);
+$('showReference').onclick = () => selectView(true);
+function captureMapImage() {
+  const hidden = $('mapView').hidden;
+  $('mapView').hidden = false;
+  try {
+    map.render({ ...tracker.state, markers: markers.filter((m) => m.segment === segments.length) });
+    return $('map').toDataURL('image/png');
+  } finally {
+    $('mapView').hidden = hidden;
+  }
+}
 $('adjustmentWindow').onchange = () => {
   const input = $('adjustmentWindow');
   const value = Number(input.value);
@@ -222,7 +272,7 @@ function historyPayload() {
       orientation: 'degrees',
       distance: 'metres',
     },
-    mapImage: $('map').toDataURL('image/png'),
+    mapImage: captureMapImage(),
   };
   return data;
 }
