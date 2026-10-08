@@ -32,15 +32,6 @@ function archiveSegment(nextPhase) {
 const map = new LocalMapRenderer($('map'));
 function render() {
   const s = tracker.state;
-  const labels = {
-    waiting: 'Grönt: inväntar gångdata.',
-    following: 'Grönt: inväntar tillräckligt gångunderlag.',
-    checking: 'Grönt: telefonrörelse, inväntar normala steg för efterhandskorrigering.',
-    uncertain: 'Grönt: osäkert underlag, behåller senaste färdriktning.',
-    turning: 'Grönt: sväng registrerad med gyroskopet.',
-    supported: 'Grönt: färdriktning från gångens acceleration.',
-  };
-  $('calculatedStatus').textContent = labels[s.calculatedStatus ?? 'waiting'];
   map.render({ ...s, markers: markers.filter((m) => m.segment === segments.length) });
   $('markDeviation').disabled = !tracker.drawing;
   $('distance').textContent = s.distance.toLocaleString('sv-SE', {

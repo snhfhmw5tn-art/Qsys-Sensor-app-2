@@ -182,7 +182,6 @@ export class LocalMapRenderer extends IMapRenderer {
         [
           ...state.trajectory,
           ...(state.phoneTrajectory ?? []),
-          ...(state.calculatedTrajectory ?? []),
           ...(state.referenceTrajectory ?? []),
           state,
         ].map((p) => rotateToTravel(p, viewHeading)),
@@ -247,18 +246,6 @@ export class LocalMapRenderer extends IMapRenderer {
         ctx.fillRect(p.x, p.y, C.cellSize * this.zoom, C.cellSize * this.zoom);
       }
     ctx.globalAlpha = 1;
-    ctx.save();
-    ctx.strokeStyle = '#32d45a';
-    ctx.lineWidth = 7;
-    ctx.setLineDash(state.calculatedStatus === 'supported' ? [] : [5, 3]);
-    ctx.beginPath();
-    (state.calculatedTrajectory ?? []).forEach((p, i) => {
-      const q = project(p);
-      if (i) ctx.lineTo(q.x, q.y);
-      else ctx.moveTo(q.x, q.y);
-    });
-    ctx.stroke();
-    ctx.restore();
     ctx.strokeStyle = '#e8ac61';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -317,25 +304,6 @@ export class LocalMapRenderer extends IMapRenderer {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(String(marker.id), p.x, p.y);
-      ctx.restore();
-    }
-    const calculatedEnd = state.calculatedTrajectory?.at(-1);
-    if (calculatedEnd && Number.isFinite(state.calculatedHeading)) {
-      const p = project(calculatedEnd);
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(radians(state.calculatedHeading - viewHeading));
-      ctx.beginPath();
-      ctx.moveTo(0, -23);
-      ctx.lineTo(10, 10);
-      ctx.lineTo(0, 4);
-      ctx.lineTo(-10, 10);
-      ctx.closePath();
-      ctx.fillStyle = '#32d45a';
-      ctx.fill();
-      ctx.strokeStyle = '#101d29';
-      ctx.lineWidth = 2;
-      ctx.stroke();
       ctx.restore();
     }
     const scale = spacing * 5;
