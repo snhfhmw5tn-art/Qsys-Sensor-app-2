@@ -111,7 +111,11 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.fillStyle = '#101d29';
     ctx.fillRect(0, 0, w, h);
     if (this.follow) {
-      const fit = fitTrajectory([...state.trajectory, state], w, h);
+      const fit = fitTrajectory(
+        [...state.trajectory, ...(state.referenceTrajectory ?? []), state],
+        w,
+        h,
+      );
       this.zoom = fit.zoom;
       this.pan = { x: -fit.x * this.zoom, y: fit.y * this.zoom };
     }
@@ -167,6 +171,17 @@ export class LocalMapRenderer extends IMapRenderer {
         ctx.fillRect(p.x, p.y, C.cellSize * this.zoom, C.cellSize * this.zoom);
       }
     ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#b594ff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 3]);
+    ctx.beginPath();
+    (state.referenceTrajectory ?? []).forEach((p, i) => {
+      const q = project(p);
+      if (i) ctx.lineTo(q.x, q.y);
+      else ctx.moveTo(q.x, q.y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
     const trajectory = state.trajectory;
     ctx.lineWidth = 2.5;
     for (let i = 1; i < trajectory.length; i++) {

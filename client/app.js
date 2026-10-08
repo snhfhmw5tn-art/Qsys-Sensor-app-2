@@ -12,12 +12,14 @@ import { LocalMapRenderer, GoogleMapsRenderer } from './maps.js';
 import { benchmark } from './benchmark.js';
 const $ = (id) => document.getElementById(id),
   set = (id, value) => ($(id).textContent = value);
+let buildMetadata = null;
 fetch('/client/version.json', { cache: 'no-store' })
   .then((r) => {
     if (!r.ok) throw new Error('Version saknas');
     return r.json();
   })
   .then((v) => {
+    buildMetadata = v;
     const date = new Intl.DateTimeFormat('sv-SE', {
       timeZone: 'Europe/Stockholm',
       dateStyle: 'short',
@@ -146,7 +148,10 @@ function renderSensors() {
   );
 }
 function render(s) {
-  if (pipeline) s.deviceHeading = pipeline.heading.deviceYaw;
+  if (pipeline) {
+    s.deviceHeading = pipeline.heading.deviceYaw;
+    s.referenceTrajectory = $('showReference').checked ? (pipeline.reference?.path ?? []) : [];
+  }
   state = s;
   set('mode', labels[s.motionMode]);
   set(
@@ -311,6 +316,9 @@ async function start(kind) {
       pipeline.process(s);
       if (state && s.t - (pipeline.lastMapUpdate ?? -1) >= 0.1) {
         state.deviceHeading = pipeline.heading.deviceYaw;
+        state.referenceTrajectory = $('showReference').checked
+          ? (pipeline.reference?.path ?? [])
+          : [];
         renderer.render(state);
         pipeline.lastMapUpdate = s.t;
       }
@@ -437,6 +445,65 @@ $('stop').onclick = safely(stop);
 $('replay').onclick = () => start('replay');
 $('record').onchange = () => (recording.active = running && $('record').checked);
 $('export').onclick = () => download(recording.export(), 'qsys-recording.json');
+$('showReference').onchange = () => {
+  if (state) render(state);
+};
+function diagnosticImage() {
+  if (!state) throw new Error('Starta en mätning först.');
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;left:-10000px;width:1000px;height:650px';
+  document.body.append(canvas);
+  const map = new LocalMapRenderer(canvas);
+  try {
+    map.render({
+      ...state,
+      referenceTrajectory: pipeline?.reference?.path ?? [],
+      deviceHeading: pipeline?.heading.deviceYaw ?? state.deviceHeading,
+    });
+    return canvas.toDataURL('image/png');
+  } finally {
+    map.destroy();
+    canvas.remove();
+  }
+}
+$('markDeviation').onclick = () => {
+  recording.mark(pipeline?.lastSample?.t ?? 0, 'Deviation', {
+    position: state ? { x: state.x, y: state.y } : null,
+  });
+  notice('Avvikelsen är tidsmarkerad i felsökningsfilen.');
+};
+$('exportImage').onclick = safely(() => {
+  const a = document.createElement('a');
+  a.href = diagnosticImage();
+  a.download = 'qsys-rorelsekarta.png';
+  a.click();
+});
+$('exportDebug').onclick = safely(() =>
+  download(
+    {
+      format: 'qsys-debug',
+      version: 1,
+      created: new Date().toISOString(),
+      build: buildMetadata,
+      environment: {
+        userAgent: navigator.userAgent,
+        secureContext: globalThis.isSecureContext,
+        statuses,
+      },
+      recording: recording.export(),
+      rawFallback: pipeline?.raw.samples ?? [],
+      coverage: { recordingEnabled: recording.active, derivedLimit: 100000, referenceLimit: 20000 },
+      diagnostics: pipeline?.diagnostics ?? [],
+      observations,
+      state,
+      referenceTrajectory: pipeline?.reference?.path ?? [],
+      referenceMethod:
+        'Phone-heading acceleration integration without stop filters; drifts, not ground truth.',
+      mapImage: diagnosticImage(),
+    },
+    'qsys-felsokning.json',
+  ),
+);
 $('exportRing').onclick = () =>
   download(
     {

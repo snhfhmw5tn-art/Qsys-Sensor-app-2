@@ -106,6 +106,10 @@
             </div>
             <div class="map-legend">
               <span class="legend-line"></span> Rörelse
+              <label
+                ><input id="showReference" type="checkbox" checked />
+                <span style="color: #b594ff">IMU-referens utan stoppfilter (kan driva)</span></label
+              >
               <span class="legend-correction"></span> GPS-korrigering
               <span style="color: #e8ac61">▯ Telefon</span>
               <span style="color: #56e2c9">➤ Telefonens riktning</span>
@@ -192,6 +196,9 @@
                 accept="application/json,.json"
                 hidden /></label
             ><button id="replay" disabled>▷ Replay</button
+            ><button id="exportDebug">↓ Felsökning + kartbild (JSON)</button
+            ><button id="exportImage">↓ Kartbild (PNG)</button
+            ><button id="markDeviation">Markera avvikelse</button
             ><button id="exportRing">↓ Senaste 60 s</button>
           </div>
           <p class="footnote" id="recordStatus">Ingen inspelning ännu.</p>

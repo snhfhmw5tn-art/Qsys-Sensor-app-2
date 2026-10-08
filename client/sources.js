@@ -91,6 +91,10 @@ export class LiveSensorSource extends ISensorSource {
       linearAcceleration: vector(e.acceleration),
       gyro,
       orientation: fresh ? this.orientation : null,
+      orientationAge: this.last.orientation
+        ? (performance.now() - this.last.orientation) / 1000
+        : null,
+      screenAngle: globalThis.screen?.orientation?.angle ?? 0,
     });
   }
   stop() {

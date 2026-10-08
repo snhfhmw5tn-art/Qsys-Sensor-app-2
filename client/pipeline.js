@@ -347,6 +347,19 @@ export class HeadingEstimator {
     // Relative physical rotation, never compass alpha. Navigation bearings are
     // clockwise; the browser's gravity-projected angular rate is anticlockwise.
     if (this.initialized) this.deviceYaw = wrap(this.deviceYaw - s.yawRate * s.dt);
+    if (s.orientation) {
+      const matrix = new CoordinateTransformer().matrix(s.orientation);
+      this.orientationOrigin ??= matrix;
+      const relative = matrix.map((row) =>
+        this.orientationOrigin.map((base) => row.reduce((sum, v, i) => sum + v * base[i], 0)),
+      );
+      this.orientationYaw = wrap(
+        (-Math.atan2(relative[1][0] - relative[0][1], relative[0][0] + relative[1][1]) * 180) /
+          Math.PI,
+      );
+      // A missing gyroscope must not freeze the phone indicator.
+      if (s.gyro === null) this.deviceYaw = this.orientationYaw;
+    }
     this.initialized = true;
     this.filteredDeviceYaw = wrap(
       this.filteredDeviceYaw +
@@ -443,6 +456,25 @@ export class SensorPipeline {
         this.event('StateChanged', s.t, `${before} → ${this.machine.mode}`);
     }
     this.heading.update(s, this.features, this.machine.mode);
+    this.reference ??= new LiveReference();
+    this.reference.update(s, this.heading.deviceYaw);
+    this.diagnostics ??= [];
+    this.diagnostics.push({
+      t: s.t,
+      nav: s.nav,
+      yawRate: s.yawRate,
+      deviceHeading: this.heading.deviceYaw,
+      orientationHeading: this.heading.orientationYaw,
+      travelHeading: this.heading.heading,
+      confidence: this.heading.confidence,
+      mode: this.machine.mode,
+      candidate: this.estimate,
+      features: this.features,
+      bias: [...this.preprocessor.bias],
+      calibrated: this.preprocessor.calibrated,
+      reference: { x: this.reference.x, y: this.reference.y, velocity: this.reference.velocity },
+    });
+    if (this.diagnostics.length > 100000) this.diagnostics.splice(0, 1000);
     this.headingHistory.push({
       t: s.t,
       heading:
@@ -542,5 +574,36 @@ export class SensorPipeline {
       gps: fix,
       headingConfidence: this.heading.confidence,
     });
+  }
+}
+
+// Diagnostic integration deliberately has no stationary or zero-velocity filter.
+export class LiveReference {
+  constructor() {
+    this.x = 0;
+    this.y = 0;
+    this.velocity = 0;
+    this.previous = null;
+    this.origin = null;
+    this.path = [{ x: 0, y: 0, t: 0 }];
+  }
+  update(s, heading) {
+    const dt = this.previous === null ? 0 : s.t - this.previous;
+    this.previous = s.t;
+    if (!s.orientation || dt <= 0 || dt > 0.2) return;
+    if (this.origin === null) {
+      const m = new CoordinateTransformer().matrix(s.orientation);
+      const axis = Math.abs(m[2][1]) > 0.7 ? [0, 0, -1] : [0, 1, 0];
+      const v = m.map((row) => row.reduce((sum, x, i) => sum + x * axis[i], 0));
+      this.origin = Math.atan2(v[0], v[1]);
+    }
+    const h = this.origin + radians(heading),
+      a = s.nav[0] * Math.sin(h) + s.nav[1] * Math.cos(h);
+    const distance = this.velocity * dt + 0.5 * a * dt * dt;
+    this.velocity += a * dt;
+    this.x += distance * Math.sin(radians(heading));
+    this.y += distance * Math.cos(radians(heading));
+    if (s.t - this.path.at(-1).t >= 0.1) this.path.push({ x: this.x, y: this.y, t: s.t });
+    if (this.path.length > 20000) this.path.splice(1, 1000);
   }
 }
