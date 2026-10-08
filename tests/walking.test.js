@@ -151,10 +151,12 @@ test('travel direction ignores independent phone rotation but responds to gait t
     horizontalEnergy: 0.1,
     pcaHeading: 30,
   };
-  travel.update({ ...f }, 0);
+  for (let i = 0; i < 20; i++) travel.update({ ...f }, 0);
   for (let i = 0; i < 20; i++) travel.update({ ...f }, i * 4);
   assert.ok(Math.abs(travel.heading) < 1e-9);
-  for (let i = 0; i < 8; i++) travel.update({ ...f, pcaHeading: 90 }, 80);
+  for (let i = 0; i < 20; i++) travel.update({ ...f }, 76);
+  for (let i = 0; i <= 12; i++) travel.update({ ...f, pcaHeading: 30 + i * 5 }, 76 + i * 5);
+  for (let i = 0; i < 20; i++) travel.update({ ...f, pcaHeading: 90 }, 136);
   assert.ok(Math.abs(travel.heading - 60) < 0.1);
   travel.update({ ...f, anisotropy: 0.1, pcaHeading: 150 }, -90);
   assert.ok(Math.abs(travel.heading - 60) < 0.1);
@@ -217,4 +219,22 @@ test('retrospective green correction never mutates orange reference', () => {
   assert.equal(JSON.stringify(tracker.state.phoneTrajectory), orange);
   assert.ok(Math.abs(tracker.state.x - 1) < 1e-8);
   assert.ok(Math.abs(tracker.state.y + 1) < 1e-8);
+});
+test('slow partial turns and continuous curves retain full angle across former four-second cutoff', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  for (const angle of [-90, -45, 30, 45, 90, 180]) {
+    const p = new TravelDirection();
+    const f = (a) => ({
+      orientationReliable: true,
+      periodicity: 0.9,
+      anisotropy: 0.8,
+      horizontalEnergy: 0.2,
+      pcaHeading: 20 + a,
+    });
+    for (let i = 0; i < 20; i++) p.update(f(0), 0, i * 0.1);
+    for (let i = 0; i <= 60; i++) p.update(f((angle * i) / 60), (angle * i) / 60, 2 + i * 0.1);
+    for (let i = 0; i < 20; i++) p.update(f(angle), angle, 8 + i * 0.1);
+    const error = Math.abs(((p.heading - angle + 540) % 360) - 180);
+    assert.ok(error < 3, angle + ' degree turn error ' + error);
+  }
 });

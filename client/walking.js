@@ -233,6 +233,7 @@ export class TravelDirection {
     this.reference = null;
     this.turn = null;
     this.phoneWindow = [];
+    this.onset = null;
     this.confidence = 0;
     this.corrections = [];
   }
@@ -250,7 +251,8 @@ export class TravelDirection {
     const quiet =
       this.phoneWindow.length > 1 &&
       this.phoneWindow.at(-1).t - this.phoneWindow[0].t >= 0.45 &&
-      this.phoneWindow.every((p) => Math.abs(wrap(p.phone - phoneHeading)) < 8);
+      this.phoneWindow.every((p) => Math.abs(wrap(p.phone - phoneHeading)) < 8) &&
+      Math.abs(wrap(phoneHeading - this.phoneWindow[0].phone)) < 3;
     const f = features,
       fresh = f && f !== this.last;
     if (fresh) this.last = f;
@@ -268,7 +270,10 @@ export class TravelDirection {
           y = this.initial.reduce((sum, p) => sum + Math.sin(radians(p.axis * 2)), 0);
         this.reference = {
           axis: (Math.atan2(y, x) * 90) / Math.PI,
-          phone: phoneHeading,
+          phone:
+            this.initial.reduce((sum, p) => sum + wrap(p.phone - this.initial[0].phone), 0) /
+              this.initial.length +
+            this.initial[0].phone,
           heading: this.heading,
           t,
         };
@@ -278,12 +283,17 @@ export class TravelDirection {
     }
     const ref = this.reference,
       delta = wrap(phoneHeading - ref.phone);
-    if (!this.turn && fresh && reliable && Math.abs(delta) > 25) {
+    if (!this.turn) {
+      if (Math.abs(delta) > 8) this.onset ??= this.phoneWindow[0].t;
+      else this.onset = null;
+    }
+    if (!this.turn && fresh && reliable && Math.abs(delta) > 15) {
       const axisDelta = axial(f.pcaHeading - ref.axis);
-      if (Math.abs(axisDelta) > 18 && Math.abs(axial(axisDelta - delta)) < 45) {
+      if (Math.abs(axisDelta) > 12 && Math.abs(axial(axisDelta - delta)) < 45) {
         this.turn = {
           ...ref,
-          start: ref.t,
+          start: this.onset ?? ref.t,
+          detectedAt: t,
           lastMotion: t,
           lastPhone: phoneHeading,
           confirmed: false,
@@ -311,7 +321,13 @@ export class TravelDirection {
           baseHeading: turn.heading,
         };
       }
-      if ((quiet && t - turn.lastMotion > 0.4) || t - turn.start > 4) {
+      if (
+        (quiet &&
+          Math.abs(wrap(phoneHeading - this.phoneWindow[0].phone)) < 1 &&
+          agreement &&
+          t - turn.detectedAt > 0.5) ||
+        t - turn.detectedAt > 12
+      ) {
         if (turn.confirmed) this.corrections.push({ ...this.correction, end: t });
         this.reference = {
           axis: reliable ? f.pcaHeading : turn.axis + rotation,
@@ -320,17 +336,40 @@ export class TravelDirection {
           t,
         };
         this.turn = null;
+        this.onset = null;
       }
-    } else if (quiet && fresh && reliable) {
+    } else if (
+      quiet &&
+      fresh &&
+      reliable &&
+      Math.abs(delta) < 4 &&
+      Math.abs(wrap(phoneHeading - this.phoneWindow[0].phone)) < 1
+    ) {
       // Stable phone: learn gait-axis variation without rotating the route.
       this.reference = {
         axis: wrap(ref.axis + 0.15 * axial(f.pcaHeading - ref.axis)),
-        phone: phoneHeading,
+        phone: wrap(ref.phone + 0.01 * delta),
         heading: this.heading,
         t,
       };
       this.confidence = 0.6;
-    } else if (!reliable) this.confidence = 0.25;
+    } else if (
+      quiet &&
+      fresh &&
+      reliable &&
+      Math.abs(wrap(phoneHeading - this.phoneWindow[0].phone)) < 1 &&
+      Math.abs(axial(f.pcaHeading - ref.axis)) < 12
+    ) {
+      this.settledSince ??= t;
+      if (t - this.settledSince > 0.7) {
+        this.reference = { axis: f.pcaHeading, phone: phoneHeading, heading: this.heading, t };
+        this.settledSince = null;
+        this.onset = null;
+      }
+    } else {
+      this.settledSince = null;
+      if (!reliable) this.confidence = 0.25;
+    }
     return this.heading;
   }
 }
