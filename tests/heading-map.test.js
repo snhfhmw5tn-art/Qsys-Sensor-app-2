@@ -5,8 +5,67 @@ import {
   CoordinateTransformer,
   MotionFeatureExtractor,
   SensorPreprocessor,
+  SensorPipeline,
 } from '../client/pipeline.js';
 import { fitTrajectory, LocalMapRenderer } from '../client/maps.js';
+
+test('a turn in the first walking steps survives delayed gait confirmation', () => {
+  const observations = [];
+  const p = new SensorPipeline((o) => observations.push(o), {
+    deviceId: 'startup-turn',
+    sessionId: 'startup-turn',
+  });
+  for (let i = 0; i < 400; i++) {
+    const t = i / 50,
+      walking = t >= 2,
+      angle = Math.max(0, Math.min(90, (t - 2) * 90));
+    const wave = walking ? Math.sin(2 * Math.PI * 1.8 * (t - 2)) : 0;
+    p.process({
+      t,
+      gravityAcceleration: [0.6 * wave, 0, 9.80665 + 2 * wave],
+      linearAcceleration: [0.6 * wave, 0, 2 * wave],
+      gyro: [0, 0, t >= 2 && t < 3 ? 90 : 0],
+      orientation: { alpha: angle, beta: 0, gamma: 0 },
+    });
+  }
+  const first = observations.find((o) => o.steps?.length);
+  assert.ok(first, 'no confirmed walking steps');
+  assert.ok(first.monotonicTimestamp < 4.5, `startup delayed until ${first.monotonicTimestamp}`);
+  assert.ok(first.steps.length >= 3, 'initial steps must be retained');
+  assert.ok(Math.abs(first.steps[0].heading) > 5, 'early turn was lost');
+  assert.ok(
+    Math.abs(first.steps.at(-1).heading - first.steps[0].heading) > 25,
+    'initial curve was flattened',
+  );
+  assert.ok(Math.abs(p.heading.heading) > 70, 'startup direction was reset to zero');
+});
+
+test('turning immediately after a stop preserves the resumed first steps', () => {
+  const observations = [];
+  const p = new SensorPipeline((o) => observations.push(o), {
+    deviceId: 'resume-turn',
+    sessionId: 'resume-turn',
+  });
+  for (let i = 0; i < 900; i++) {
+    const t = i / 50,
+      walking = (t >= 2 && t < 6) || t >= 10;
+    const angle = Math.max(0, Math.min(90, (t - 10) * 90));
+    const wave = walking ? Math.sin(2 * Math.PI * 1.8 * (t - 2)) : 0;
+    p.process({
+      t,
+      gravityAcceleration: [0.6 * wave, 0, 9.80665 + 2 * wave],
+      linearAcceleration: [0.6 * wave, 0, 2 * wave],
+      gyro: [0, 0, t >= 10 && t < 11 ? 90 : 0],
+      orientation: { alpha: angle, beta: 0, gamma: 0 },
+    });
+  }
+  const first = observations.find((o) => o.steps?.some((s) => s.timestamp >= 10));
+  assert.ok(first, 'no resumed walking steps');
+  const steps = first.steps.filter((s) => s.timestamp >= 10);
+  assert.ok(first.monotonicTimestamp < 12.5);
+  assert.ok(steps.length >= 3);
+  assert.ok(Math.abs(steps.at(-1).heading - steps[0].heading) > 25, 'resumed turn was flattened');
+});
 
 test('quiet sensor startup calibrates within 0.7 seconds', () => {
   const p = new SensorPreprocessor();

@@ -361,7 +361,9 @@ export class HeadingEstimator {
       f.horizontalEnergy > 0.005 &&
       f.periodicity > 0.35
     ) {
-      this.pcaOrigin ??= f.pcaHeading;
+      // Anchor PCA to the rotation already observed during startup; never
+      // redefine the direction at the first confirmed gait window as zero.
+      this.pcaOrigin ??= wrap(f.pcaHeading - this.filteredDeviceYaw - this.mountingOffset);
       let target = wrap(f.pcaHeading - this.pcaOrigin);
       if (Math.abs(wrap(target - this.heading)) > 90) target = wrap(target + 180);
       // Learn the phone-to-travel offset from gait, rather than assuming they
@@ -408,6 +410,7 @@ export class SensorPipeline {
     this.vehicleSamples = [];
     this.events = [];
     this.lastSample = null;
+    this.estimate = null;
   }
   event(type, t, detail = '') {
     this.events.unshift({ type, t, detail });
@@ -419,6 +422,7 @@ export class SensorPipeline {
       this.machine = new TransportModeStateMachine();
       this.steps.peaks = [];
       this.features = null;
+      this.estimate = null;
       this.heading.confidence = 0.15;
       this.preprocessor.previous = null;
       this.event('SensorDropout', sample.t, 'Window återställd');
@@ -432,16 +436,39 @@ export class SensorPipeline {
       this.features = this.extractor.extract(this.window.samples);
       this.lastFeatures = s.t;
       const before = this.machine.mode;
-      this.machine.update(this.classifier.classify(this.features, this.context()), s.t);
+      this.estimate = this.classifier.classify(this.features, this.context());
+      this.machine.update(this.estimate, s.t);
       if (before !== this.machine.mode)
         this.event('StateChanged', s.t, `${before} → ${this.machine.mode}`);
     }
     this.heading.update(s, this.features, this.machine.mode);
-    this.headingHistory.push({ t: s.t, heading: this.heading.heading });
+    this.headingHistory.push({
+      t: s.t,
+      heading:
+        family(this.machine.mode) === 'Pedestrian'
+          ? this.heading.heading
+          : wrap(this.heading.deviceYaw + this.heading.mountingOffset),
+    });
     while (this.headingHistory.length && this.headingHistory[0].t < s.t - 8)
       this.headingHistory.shift();
-    const peaks = this.steps.update(s, this.features, family(this.machine.mode) === 'Pedestrian');
+    const gaitCandidate =
+      family(this.estimate?.mode) === 'Pedestrian' &&
+      this.estimate.confidence >= C.transitionConfidence;
+    const peaks = this.steps.update(
+      s,
+      this.features,
+      family(this.machine.mode) === 'Pedestrian' || gaitCandidate,
+    );
     if (peaks.length) {
+      // Three regular peaks plus periodic gait evidence are stronger startup
+      // evidence than waiting out the separate mode debounce as well.
+      if (gaitCandidate && family(this.machine.mode) !== 'Pedestrian') {
+        const before = this.machine.mode;
+        this.machine.mode = this.estimate.mode;
+        this.machine.confidence = this.estimate.confidence;
+        this.machine.changed = s.t;
+        this.event('StateChanged', s.t, `${before} → ${this.machine.mode} (bekräftade steg)`);
+      }
       this.event('BufferedStepsApplied', s.t, String(peaks.length));
       this.pendingSteps.push(
         ...peaks.map((p) => ({
