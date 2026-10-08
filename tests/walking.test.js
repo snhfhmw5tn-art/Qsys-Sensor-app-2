@@ -199,7 +199,7 @@ test('grip tilt is corrected after navigation-frame gait settles', async () => {
   for (let i = 0; i < 30; i++)
     p.update(f(20), 90, 4 + i * 0.1, { orientation: { beta: 0, gamma: 90 } });
   assert.equal(p.heading, 0);
-  assert.equal(p.corrections.length, 1);
+  assert.equal(p.heading, 0);
 });
 
 test('successive right-angle turns retain the original gait coordinate reference', async () => {
@@ -251,60 +251,6 @@ const gaitFeature = (axis) => ({
   horizontalEnergy: 0.2,
   pcaHeading: axis,
 });
-test('arbitrary mounting angles are compensated retrospectively, then real turns follow phone', async () => {
-  const { TravelDirection, interpolateHeading } = await import('../client/walking.js');
-  for (const angle of [14, 37, -24, 63, 89]) {
-    const p = new TravelDirection();
-    let t = 0;
-    for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
-    for (let i = 1; i <= 10; i++, t += 0.1) p.update(gaitFeature(20), (angle * i) / 10, t);
-    assert.ok(Math.abs(p.heading - angle) < 1e-8); // Provisional live direction.
-    for (let i = 0; i < 25; i++, t += 0.1) p.update(gaitFeature(20), angle, t);
-    assert.ok(Math.abs(p.heading) < 1e-8);
-    assert.ok(Math.abs(p.offset - angle) < 1e-8);
-    assert.equal(p.corrections.length, 1);
-    assert.ok(p.correction.headings.every((point) => Math.abs(point.heading) < 1e-8));
-    assert.ok(Math.abs(interpolateHeading(p.correction.headings, t - 0.1)) < 1e-8);
-    for (let i = 1; i <= 20; i++, t += 0.1) p.update(gaitFeature(20 + i * 3), angle + i * 3, t);
-    for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(80), angle + 60, t);
-    assert.ok(Math.abs(p.heading - 60) < 1e-8);
-    assert.ok(Math.abs(p.offset - angle) < 1e-8);
-  }
-});
-test('phone rotation at rest waits for walking evidence before correcting mounting', async () => {
-  const { TravelDirection } = await import('../client/walking.js');
-  const p = new TravelDirection();
-  let t = 0;
-  for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
-  for (let i = 0; i < 30; i++, t += 0.1) p.update({ ...gaitFeature(20), periodicity: 0 }, 47, t);
-  assert.equal(p.offset, 0);
-  for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 47, t);
-  assert.equal(p.offset, 47);
-  assert.equal(p.heading, 0);
-});
-test('unreliable gait cannot change mounting offset or suppress phone turns', async () => {
-  const { TravelDirection } = await import('../client/walking.js');
-  const p = new TravelDirection();
-  for (let i = 0; i < 30; i++) p.update(gaitFeature(20), 0, i * 0.1);
-  for (let i = 0; i < 50; i++) p.update({ ...gaitFeature(150), anisotropy: 0.1 }, 73, 3 + i * 0.1);
-  assert.equal(p.offset, 0);
-  assert.equal(p.heading, 73);
-  assert.equal(p.confidence, 0.2);
-});
-
-test('mounting correction uses a 700ms window and tolerates small gait-axis changes with a large grip rotation', async () => {
-  const { TravelDirection } = await import('../client/walking.js');
-  const p = new TravelDirection();
-  let t = 0;
-  for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
-  const start = t;
-  for (let i = 0; i < 9; i++, t += 0.1) p.update(gaitFeature(0), -78, t);
-  assert.ok(p.corrections.length > 0);
-  assert.ok(p.corrections[0].end - start <= 0.8);
-  assert.ok(Math.abs(p.heading) < 1e-8);
-  assert.ok(Math.abs(p.offset + 78) < 1e-8);
-  assert.ok(p.evidence.every((point) => point.t >= t - 0.8));
-});
 
 test('analysis window defaults to 700ms, is configurable, and is exported', async () => {
   const { TravelDirection } = await import('../client/walking.js');
@@ -321,4 +267,47 @@ test('analysis window defaults to 700ms, is configurable, and is exported', asyn
   assert.throws(() => p.setAdjustmentWindow(NaN), RangeError);
   const tracker = new WalkingTracker({ adjustmentWindowMs: 1200 });
   assert.equal(tracker.exportHistory().greenDirection.adjustmentWindowMs, 1200);
+});
+
+test('fixed gait origin ignores arbitrary phone rotations both walking and standing', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  for (const angle of [14, 37, -24, 63, 89, 175, -150]) {
+    const p = new TravelDirection();
+    let t = 0;
+    for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
+    for (let i = 1; i <= 20; i++, t += 0.1) p.update(gaitFeature(20), (angle * i) / 20, t);
+    assert.equal(p.heading, 0);
+    for (let i = 0; i < 20; i++, t += 0.1)
+      p.update({ ...gaitFeature(20), periodicity: 0 }, -angle, t);
+    assert.equal(p.heading, 0);
+    for (let i = 0; i < 20; i++, t += 0.1) p.update(gaitFeature(20), -angle, t);
+    assert.equal(p.heading, 0);
+  }
+});
+test('gait turns independently of phone heading and preserves original zero', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  let t = 0;
+  for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
+  const origin = p.reference.axis;
+  for (const target of [37, 90, 180, 240]) {
+    const start = p.heading;
+    for (let i = 1; i <= 30; i++, t += 0.1)
+      p.update(gaitFeature(20 + start + ((target - start) * i) / 30), 0, t);
+    for (let i = 0; i < 15; i++, t += 0.1) p.update(gaitFeature(20 + target), 0, t);
+    const error = ((p.heading - target + 540) % 360) - 180;
+    assert.ok(Math.abs(error) < 3);
+    assert.equal(p.reference.axis, origin);
+  }
+});
+test('weak gait holds last safe direction even when phone turns', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  for (let i = 0; i < 30; i++) p.update(gaitFeature(20), 0, i * 0.1);
+  for (let i = 0; i < 40; i++) p.update({ ...gaitFeature(150), anisotropy: 0.1 }, 73, 3 + i * 0.1);
+  assert.equal(p.heading, 0);
+  assert.equal(p.confidence, 0.2);
+  p.resetEvidence();
+  assert.ok(p.reference);
+  assert.equal(p.heading, 0);
 });
