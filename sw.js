@@ -1,15 +1,13 @@
-const CACHE = 'qsys-motion-v10';
+const CACHE = 'qsys-motion-v11';
 const FILES = [
   '/',
   '/client/style.css',
   '/client/app.js',
   '/client/pipeline.js',
   '/client/sources.js',
-  '/client/network.js',
+  '/client/walking.js',
   '/client/maps.js',
-  '/client/benchmark.js',
   '/shared/config.js',
-  '/vendor/geographiclib-geodesic.min.js',
 ];
 self.addEventListener('install', (e) =>
   e.waitUntil(

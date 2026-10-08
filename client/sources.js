@@ -41,28 +41,9 @@ export class LiveSensorSource extends ISensorSource {
     this.onStatus('accelerometer', 'waiting');
     this.onStatus('gyroscope', 'waiting');
     this.onStatus('orientation', permissions[1].value === 'granted' ? 'waiting' : 'denied');
-    if (navigator.geolocation)
-      this.watch = navigator.geolocation.watchPosition(
-        (p) => {
-          this.last.gps = performance.now();
-          this.onStatus('gps', 'active');
-          this.onGps({
-            t: (performance.now() - this.started) / 1000,
-            latitude: p.coords.latitude,
-            longitude: p.coords.longitude,
-            accuracy: p.coords.accuracy,
-            speed: p.coords.speed,
-            heading: p.coords.heading,
-            age: Math.max(0, (Date.now() - p.timestamp) / 1000),
-          });
-        },
-        (e) => this.onStatus('gps', e.code === 1 ? 'denied' : 'unavailable'),
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
-      );
-    else this.onStatus('gps', 'unavailable');
     this.timer = setInterval(() => {
-      for (const key of ['accelerometer', 'gyroscope', 'orientation', 'gps'])
-        if (!this.last[key] || performance.now() - this.last[key] > (key === 'gps' ? 10000 : 3000))
+      for (const key of ['accelerometer', 'gyroscope', 'orientation'])
+        if (!this.last[key] || performance.now() - this.last[key] > 3000)
           this.onStatus(key, this.last[key] ? 'stopped' : 'unavailable');
     }, 1000);
   }
@@ -100,7 +81,6 @@ export class LiveSensorSource extends ISensorSource {
   stop() {
     window.removeEventListener('devicemotion', this.motion);
     window.removeEventListener('deviceorientation', this.orient);
-    if (this.watch !== undefined) navigator.geolocation.clearWatch(this.watch);
     clearInterval(this.timer);
   }
 }

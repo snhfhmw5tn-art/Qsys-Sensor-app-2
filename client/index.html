@@ -4,320 +4,56 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <meta name="theme-color" content="#101d29" />
-    <meta
-      name="description"
-      content="Qsys Motion — forskningsinformerad sensorprototyp för gång, fordon och relativ positionering."
-    />
-    <title>Qsys Motion · Sensor lab</title>
+    <title>Qsys · Gångkarta</title>
     <link rel="stylesheet" href="/client/style.css" />
   </head>
   <body>
-    <div id="buildVersion" class="build-version" role="status">Version: läser commitdatum…</div>
     <header>
-      <a class="brand" href="/" aria-label="Qsys Motion hem"
-        ><span class="brand-icon">q</span><strong>Qsys <span>Motion</span></strong
-        ><small>SENSOR LAB / 02</small></a
-      ><span id="connection" class="connection">● Redo att ansluta</span
-      ><span class="prototype">FORSKNINGSPROTOTYP</span>
+      <div>
+        <strong>Qsys · Gångkarta</strong>
+        <p id="buildVersion">Läser version…</p>
+      </div>
+      <span id="status" role="status">Redo</span>
     </header>
     <main>
-      <div class="page-heading">
-        <div>
-          <p class="eyebrow">RÖRELSE & RELATIV POSITIONERING</p>
-          <h1>Varje rörelse. En tydligare bild.</h1>
-          <p class="subtitle">Följ transport, sträcka och position med enhetens egna sensorer.</p>
-        </div>
-        <div class="session-buttons">
-          <button id="demo" class="secondary">▷ Prova demo</button
-          ><button id="start" class="primary">● Starta mätning</button
-          ><button id="stop" hidden>■ Stoppa</button>
-        </div>
+      <h1>Se hur du går.</h1>
+      <p>Håll telefonen framåt. Steg och riktning ritar ditt spår med telefonens sensorer.</p>
+      <div class="controls">
+        <button id="start">Starta mätning</button><button id="stop" disabled>Stoppa</button
+        ><button id="reset">Ny karta</button>
       </div>
-      <div id="notice" role="status" aria-live="polite">
-        Loggningen startar direkt när sensorerna är tillåtna. Ingen stillaväntan krävs. HTTPS krävs.
-      </div>
-      <section class="metrics" aria-label="Rörelsedata">
-        <article class="mode-card">
-          <span class="label">TRANSPORTLÄGE</span>
-          <div class="mode-title">
-            <span class="mode-symbol" id="modeIcon">◎</span><strong id="mode">REDO</strong>
-          </div>
-          <span id="candidate" class="detail">Väntar på sensorström</span>
-          <div class="confidence-line">
-            <span>Motion confidence</span><b id="motionConfidence">—</b>
-          </div>
-          <div class="bar"><i id="motionBar"></i></div>
-        </article>
-        <article>
-          <span class="label">TOTAL STRÄCKA</span>
-          <div class="big"><span id="distance">0.0</span><small>m</small></div>
-          <div class="distance-split">
-            <span>Gång <b id="walkDistance">0.0</b></span
-            ><span>Löpning <b id="runDistance">0.0</b></span
-            ><span>Fordon <b id="vehicleDistance">0.0</b></span>
-          </div>
-        </article>
-        <article>
-          <span class="label">HASTIGHET</span>
-          <div class="big"><span id="speed">0.00</span><small>m/s</small></div>
-          <p class="detail">
-            Utjämnad <b id="smoothSpeed">0.00</b> m/s
-            <span
-              class="mini-chart"
-              id="speedTrace"
-              aria-label="Senaste utjämnade hastigheter"
-            ></span>
-          </p>
-        </article>
-        <article>
-          <span class="label">POSITION CONFIDENCE</span>
-          <div class="big"><span id="positionConfidence">—</span><small>%</small></div>
-          <p class="detail" id="confidenceNote">Kvalitetsindikator · ej validerad sannolikhet</p>
-        </article>
+      <p id="message" role="status">Sensorerna kräver HTTPS. Ingen GPS används.</p>
+      <section class="stats" aria-label="Mätning">
+        <div><b id="distance">0,0</b><span>meter · uppskattat</span></div>
+        <div><b id="steps">0</b><span>steg</span></div>
+        <div><b id="heading">0°</b><span>telefonens riktning</span></div>
       </section>
-      <div class="workspace">
-        <section class="map-panel">
-          <div class="panel-top">
-            <div>
-              <h2>Rörelsekarta <span class="live-dot"></span></h2>
-              <span class="detail">Lokal navigationsram · meter</span>
-            </div>
-            <label class="background-label"
-              >Bakgrund
-              <select id="background">
-                <option value="local">Ingen · lokal karta</option>
-                <option value="google">Google Maps</option>
-              </select></label
-            >
-          </div>
-          <div class="map-container">
-            <canvas
-              id="map"
-              aria-label="Lokal karta med trajectory, startpunkt och färdriktning"
-            ></canvas>
-            <div id="google-map" hidden></div>
-            <div class="map-tag" id="mapTag">
-              LOKAL KARTA <span>+Y = STARTENS FÄRDRIKTNING</span>
-            </div>
-            <div class="map-controls">
-              <button id="zoomIn" aria-label="Zooma in">+</button
-              ><button id="zoomOut" aria-label="Zooma ut">−</button
-              ><button id="recenter" aria-label="Visa hela färdvägen automatiskt">◎</button>
-            </div>
-            <div class="map-legend">
-              <span class="legend-line"></span> Rörelse
-              <label
-                ><input id="showReference" type="checkbox" checked />
-                <span style="color: #b594ff">IMU-referens utan stoppfilter (kan driva)</span></label
-              >
-              <span class="legend-correction"></span> GPS-korrigering
-              <span style="color: #e8ac61">▯ Telefon</span>
-              <span style="color: #56e2c9">➤ Telefonens riktning</span>
-            </div>
-          </div>
-          <div class="map-bottom">
-            <label
-              ><input id="autoZoom" type="checkbox" checked /> Autozoom – visa hela färdvägen</label
-            >
-            <span>X <b id="posX">0.00</b> m &nbsp; Y <b id="posY">0.00</b> m</span
-            ><span>↗ <b id="heading">0</b>°</span><span>Steg <b id="steps">0</b></span
-            ><span>◷ <b id="elapsed">00:00</b></span>
-          </div>
-          <div class="heatmap-control">
-            <span class="label">HEATMAP</span>
-            <div class="segments" id="heatModes">
-              <button data-heat="off" class="selected">Av</button
-              ><button data-heat="time">Tid</button><button data-heat="speed">Hastighet</button
-              ><button data-heat="visits">Besök</button
-              ><button data-heat="transport">Transport</button>
-            </div>
-            <span class="detail">0,5 × 0,5 m</span>
-          </div>
-        </section>
-        <aside>
-          <section class="side-panel">
-            <div class="panel-top">
-              <h2>Sensorer</h2>
-              <span class="detail" id="sampleRate">— Hz</span>
-            </div>
-            <div class="sensor-head"><span>Källa</span><span>Tillförlitlig / används</span></div>
-            <div id="sensors"></div>
-            <p class="footnote">
-              Status baseras på mottagen data. Magnetometer är indirekt och begränsad i webbläsaren.
-            </p>
-          </section>
-          <section class="side-panel gps-panel">
-            <div class="panel-top">
-              <h2>GPS & fusion</h2>
-              <span id="gpsQuality" class="pill">INGEN FIX</span>
-            </div>
-            <dl>
-              <div>
-                <dt>Noggrannhet</dt>
-                <dd id="gpsAccuracy">—</dd>
-              </div>
-              <div>
-                <dt>Senaste fix</dt>
-                <dd id="gpsAge">—</dd>
-              </div>
-              <div>
-                <dt>GPS fart / kurs</dt>
-                <dd id="gpsMotion">—</dd>
-              </div>
-              <div>
-                <dt>Positionskorrigering</dt>
-                <dd id="gpsCorrection">Av</dd>
-              </div>
-            </dl>
-            <p class="footnote" id="gpsReason">
-              GPS är valfritt. Lokal tracking fungerar utan satellitposition.
-            </p>
-            <div class="source-title">POSITION SOURCES <b id="gpsWeight">0 % GPS</b></div>
-            <div class="source-bar"><i id="sourceGps"></i></div>
-            <div class="source-caption">
-              <span id="sourceName">PDR / IMU</span><span id="imuWeight">100 %</span>
-            </div>
-          </section>
-        </aside>
+      <div class="map-wrap">
+        <canvas id="map" aria-label="Gångspår med telefonens riktning"></canvas
+        ><span class="map-label">STARTENS RIKTNING ↑ · METER</span>
       </div>
-      <div class="tools-grid">
-        <section class="tool-panel">
-          <h2>Inspelning & replay</h2>
-          <p class="detail">Samma sensorpipeline. Reproducerbara experiment.</p>
-          <label class="check"
-            ><input type="checkbox" id="record" checked /> Spela in rå sensordata lokalt</label
-          >
-          <div class="button-row">
-            <button id="export">↓ Exportera inspelning</button
-            ><label class="file-button"
-              >↑ Läs inspelning<input
-                type="file"
-                id="import"
-                accept="application/json,.json"
-                hidden /></label
-            ><button id="replay" disabled>▷ Replay</button
-            ><button id="exportDebug">↓ Felsökning + kartbild (JSON)</button
-            ><button id="exportImage">↓ Kartbild (PNG)</button
-            ><button id="markDeviation">Markera avvikelse</button
-            ><button id="exportRing">↓ Senaste 60 s</button>
-          </div>
-          <p class="footnote" id="recordStatus">Ingen inspelning ännu.</p>
-          <button id="exportResult">↓ Exportera serverresultat</button
-          ><button id="deleteSession" class="danger">Radera session</button>
-        </section>
-        <section class="tool-panel">
-          <h2>Ground truth & kalibrering</h2>
-          <p class="detail">Markeringar utvärderar algoritmen och ändrar inte klassificeringen.</p>
-          <div class="button-row truth" id="truthButtons">
-            <button data-truth="Standing">Står</button><button data-truth="Walking">Går</button
-            ><button data-truth="Running">Springer</button
-            ><button data-truth="Forklift">Truck</button
-            ><button data-truth="Scooter">Sparkcykel</button
-            ><button data-truth="TurningInPlace">Vänder</button>
-          </div>
-          <div class="input-row">
-            <label
-              >Känd sträcka (m)<input
-                id="knownDistance"
-                type="number"
-                min="0.1"
-                step="0.1"
-                placeholder="10.0" /></label
-            ><label
-              >Modell<select id="calibrationKind">
-                <option value="walking">Gång</option>
-                <option value="running">Löpning</option>
-              </select></label
-            ><button id="calibrate">Kalibrera</button>
-          </div>
-          <div class="input-row">
-            <label
-              >Kända steg<input
-                id="knownSteps"
-                type="number"
-                min="0"
-                step="1"
-                placeholder="20" /></label
-            ><label
-              >Känd kurs (°)<input
-                id="knownHeading"
-                type="number"
-                min="-180"
-                max="360"
-                step="1"
-                placeholder="0" /></label
-            ><button id="markReference">Markera referens</button>
-          </div>
-          <div class="input-row">
-            <label>Känd X (m)<input id="knownX" type="number" step=".1" placeholder="0" /></label
-            ><label>Känd Y (m)<input id="knownY" type="number" step=".1" placeholder="0" /></label
-            ><button id="markPosition">Markera position</button>
-          </div>
-        </section>
+      <div class="map-options">
+        <label><input id="autoZoom" type="checkbox" checked /> Autozoom – visa hela spåret</label
+        ><span><i class="green">━</i> Gångspår <i class="orange">▯</i> Telefon</span>
       </div>
-      <details class="tool-panel">
-        <summary>Diagnostik & inställningar <span>Pipeline, nätverk och händelser</span></summary>
-        <div class="diagnostics-grid">
-          <div>
-            <h3>Fordon & kartinställningar</h3>
-            <label
-              >Fordonstyp (operatörens uppgift)<select id="vehicleType">
-                <option value="Auto">Automatisk / gång</option>
-                <option value="Vehicle">Fordon</option>
-                <option value="Forklift">Truck</option>
-                <option value="Scooter">Sparkcykel</option>
-              </select></label
-            ><label class="check"
-              ><input type="checkbox" id="stopConfirmed" /> Bekräftat stillastående fordon</label
-            ><label
-              >Google Maps API-nyckel<input
-                id="mapsKey"
-                type="password"
-                autocomplete="off"
-                placeholder="Valfri, begränsa till egen domän"
-            /></label>
-            <p class="footnote">
-              Fordonstyp är en prior. IMU kan inte säkert skilja truck från sparkcykel.
-              Kartbakgrunden påverkar aldrig positionsmotorn.
-            </p>
-          </div>
-          <div>
-            <h3>Sensor & nätverk</h3>
-            <pre id="diagnostics">Ingen data</pre>
-          </div>
-          <div>
-            <h3>Händelselogg</h3>
-            <div id="events" class="event-log">Inga händelser</div>
-          </div>
-        </div>
-      </details>
-      <details class="tool-panel">
-        <summary>Replay-benchmark <span>Jämför två exporterade serverresultat</span></summary>
-        <p class="detail">
-          Läs resultat A och B från samma inspelning. Saknad ground truth visas som ej mätbar.
+      <p class="note">
+        Sträckan räknas med 0,70 m per steg. Kartan visar relativ rörelse. Telefonvridningar kan
+        påverka spåret.
+      </p>
+      <details>
+        <summary>Felsökning</summary>
+        <p id="sensors">Väntar på sensorer.</p>
+        <p>
+          De första stegen bekräftas tillsammans för att minska falska steg. Rådata loggas direkt
+          från start och sparas i minnet tills du väljer Ny karta eller lämnar sidan.
         </p>
-        <div class="button-row">
-          <label class="file-button"
-            >Läs resultat A<input type="file" id="benchmarkA" accept=".json" hidden /></label
-          ><label class="file-button"
-            >Läs resultat B<input type="file" id="benchmarkB" accept=".json" hidden
-          /></label>
+        <div class="controls">
+          <button id="mark">Markera avvikelse</button
+          ><button id="export">Spara sensorhistorik</button
+          ><button id="image">Spara kartbild</button>
         </div>
-        <div id="benchmarkResults">Väntar på resultat.</div>
       </details>
-      <footer>
-        <span>QSYS MOTION <b>v1.0</b></span
-        ><span
-          >Sensorbaserad uppskattning. Verklig precision kräver fälttester och kalibrering.</span
-        ><a
-          href="https://github.com/snhfhmw5tn-art/Qsys-Sensor-app-2"
-          target="_blank"
-          rel="noreferrer"
-          >Kod & forskningsunderlag ↗</a
-        >
-      </footer>
     </main>
-    <script src="/vendor/geographiclib-geodesic.min.js"></script>
     <script type="module" src="/client/app.js"></script>
   </body>
 </html>
