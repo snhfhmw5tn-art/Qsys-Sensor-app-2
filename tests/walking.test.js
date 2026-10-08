@@ -362,3 +362,23 @@ test('a multi-second turn is checked repeatedly without restarting the evidence 
   assert.ok(p.evidence.length >= 6);
   assert.equal(p.diagnostics().checkIntervalMs, 100);
 });
+
+test('a new local forward reference requires persistent direction and repeated confirmed footfalls', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  let t = 0;
+  for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t, {});
+  const initial = p.reference;
+  for (let i = 1; i <= 12; i++, t += 0.1) p.update(gaitFeature(20 + i * 3), 0, t, {});
+  assert.equal(p.heading, 0);
+  assert.equal(p.reference, initial);
+  for (let i = 0; i < 14; i++, t += 0.1)
+    p.update(gaitFeature(56), 0, t, {}, i === 0 || i === 5 ? [{ t }] : []);
+  assert.ok(Math.abs(p.heading - 36) < 3);
+  assert.ok(p.directionReferences.length > 0);
+  assert.ok(Math.abs(p.reference.heading - 36) < 3);
+  const before = p.heading;
+  for (let i = 0; i < 10; i++, t += 0.1)
+    p.update(gaitFeature(56), 0, t, {}, i === 0 ? [{ t }] : []);
+  assert.ok(Math.abs(p.heading - before) < 3);
+});

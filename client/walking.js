@@ -85,6 +85,7 @@ export class WalkingTracker {
         mountingOffset: this.travel.offset,
         diagnostics: this.travel.diagnostics(this.heading.deviceYaw),
         referenceChanges: this.travel.referenceChanges,
+        directionReferences: this.travel.directionReferences,
         reference: this.travel.reference,
         turn: this.travel.turn,
         corrections: this.travel.corrections,
@@ -103,7 +104,7 @@ export class WalkingTracker {
     const s = this.preprocessor.process(raw);
     this.heading.update(s, null, 'Standing');
     const peaks = this.detector.update(s);
-    this.travel.update(this.detector.features, this.heading.deviceYaw, s.t, s);
+    this.travel.update(this.detector.features, this.heading.deviceYaw, s.t, s, peaks);
     this.history.push({
       t: s.t,
       phoneHeading: this.heading.deviceYaw,
@@ -268,6 +269,9 @@ export class TravelDirection {
     this.lastConfirmedAt = null;
     this.referencePendingSince = null;
     this.confirmationCount = 0;
+    this.directionCandidate = null;
+    this.confirmedFootfalls = [];
+    this.directionReferences = [];
     this.setAdjustmentWindow(adjustmentWindowMs);
   }
   diagnostics(phone = 0) {
@@ -276,6 +280,8 @@ export class TravelDirection {
     return {
       state: this.analysisState,
       pendingSince: this.referencePendingSince,
+      directionCandidate: this.directionCandidate,
+      directionReference: this.reference,
       windowMs: this.adjustmentWindowMs,
       checkIntervalMs: 100,
       confirmationCount: this.confirmationCount,
@@ -311,7 +317,9 @@ export class TravelDirection {
     this.candidate = null;
     this.confidence = 0.2;
   }
-  update(f, phone, t = this.time + 0.1) {
+  update(f, phone, t = this.time + 0.1, sample, footfalls = []) {
+    this.confirmedFootfalls.push(...footfalls.map((p) => p.t));
+    this.confirmedFootfalls = this.confirmedFootfalls.filter((at) => at >= t - 2);
     this.time = t;
     this.offset = wrap(phone - this.heading);
     if (
@@ -331,6 +339,7 @@ export class TravelDirection {
       f.anisotropy >= 0.4 &&
       f.horizontalEnergy >= 0.012;
     if (!reliable) {
+      this.directionCandidate = null;
       this.analysisState = 'weak';
       this.candidate = null;
       this.evidence = this.evidence.filter((p) => p.t >= t - this.adjustmentWindowMs / 1000);
@@ -339,7 +348,9 @@ export class TravelDirection {
     }
     const axis = axial(f.pcaHeading);
     if (this.previousAxis == null) {
-      this.unwrappedAxis = this.reference ? this.reference.axis + this.heading : axis;
+      this.unwrappedAxis = this.reference
+        ? this.reference.axis + wrap(this.heading - this.reference.heading)
+        : axis;
       this.unwrappedAxis += axial(axis - this.unwrappedAxis);
     } else {
       const delta = axial(axis - this.previousAxis);
@@ -376,7 +387,9 @@ export class TravelDirection {
     // not constant. Use its current fitted value rather than the window midpoint.
     const coherentTurn = this.reference && residual < 8 && Math.abs(slope) <= 160;
     const estimate = coherentTurn ? average + slope * (t - center) : average;
-    this.candidate = this.reference ? wrap(estimate - this.reference.axis) : null;
+    this.candidate = this.reference
+      ? wrap(this.reference.heading + estimate - this.reference.axis)
+      : null;
     const requiredSpan = this.reference
       ? Math.min(0.25, (this.adjustmentWindowMs - 200) / 1000)
       : (this.adjustmentWindowMs - 200) / 1000;
@@ -390,10 +403,10 @@ export class TravelDirection {
       return this.heading;
     }
     this.analysisState = 'confirmed';
-    this.lastConfirmedAt = t;
-    this.confirmationCount++;
-    this.referencePendingSince = null;
     if (!this.reference) {
+      this.lastConfirmedAt = t;
+      this.confirmationCount++;
+      this.referencePendingSince = null;
       this.reference = { axis: average, heading: 0, t };
       this.path = [{ t, heading: 0 }];
       this.candidate = 0;
@@ -408,7 +421,38 @@ export class TravelDirection {
       this.confidence = 0.6;
       return this.heading;
     }
-    const target = wrap(estimate - this.reference.axis);
+    const target = wrap(this.reference.heading + estimate - this.reference.axis);
+    if (Math.abs(wrap(target - this.reference.heading)) <= 2) this.directionCandidate = null;
+    if (sample && Math.abs(wrap(target - this.reference.heading)) > 2) {
+      this.directionCandidate ??= { start: t, heading: target };
+      this.directionCandidate.heading = target;
+      const supporting = this.confirmedFootfalls.filter(
+        (at) => at >= this.directionCandidate.start - 0.3,
+      );
+      if (
+        t - this.directionCandidate.start < 0.35 ||
+        supporting.length < 2 ||
+        supporting.at(-1) - supporting[0] < 0.25
+      ) {
+        this.analysisState = 'collecting';
+        this.confidence = 0.2;
+        return this.heading;
+      }
+      // Re-establish the local forward frame, preserving its heading in the map.
+      this.reference = { axis: estimate, heading: target, t };
+      this.directionReferences.push({
+        t,
+        axis: estimate,
+        heading: target,
+        persistentSince: this.directionCandidate.start,
+        footfalls: [...supporting],
+      });
+      this.directionCandidate = null;
+    }
+
+    this.lastConfirmedAt = t;
+    this.confirmationCount++;
+    this.referencePendingSince = null;
     if (Math.abs(wrap(target - this.heading)) > 2) this.heading = target;
     this.offset = wrap(phone - this.heading);
     if (Math.abs(wrap(this.offset - this.zeroOffset)) > 2) {
@@ -424,7 +468,7 @@ export class TravelDirection {
     this.confidence = 0.6;
     // Feature extraction and the confirmation window lag the actual footfalls.
     const lag = coherentTurn ? 0.6 : 0.6 + this.adjustmentWindowMs / 2000;
-    const point = { t: Math.max(this.reference.t, t - lag), heading: this.heading };
+    const point = { t: Math.max(this.path[0].t, t - lag), heading: this.heading };
     const prior = this.path.at(-1);
     if (point.t > prior.t) {
       this.path.push(point);
