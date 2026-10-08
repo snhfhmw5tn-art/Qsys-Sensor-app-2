@@ -47,26 +47,22 @@ test('attitude corrects small gyro error immediately but rejects compass jumps',
   tracker.orient({ alpha: 130, beta: 90, gamma: 0 }, 0.2);
   assert.ok(Math.abs(tracker.state.deviceHeading + 20) < 1e-8);
 });
-test('first acceleration pulse counts immediately without gait confirmation', () => {
+test('first walking pulse counts without waiting for additional steps', () => {
   const tracker = new WalkingTracker();
-  tracker.process({
-    t: 0,
-    gravityAcceleration: [0, 0, 9.80665],
-    linearAcceleration: [0, 0, 0],
-    gyro: [0, 0, 0],
-    orientation: { alpha: 0, beta: 0, gamma: 0 },
-  });
-  tracker.process({
-    t: 0.02,
-    gravityAcceleration: [0, 0, 19.80665],
-    linearAcceleration: [0, 0, 10],
-    gyro: [0, 0, 0],
-    orientation: { alpha: 0, beta: 0, gamma: 0 },
-  });
+  for (let i = 0; i < 20; i++) {
+    const t = i * 0.02,
+      v = 2 * Math.sin(2 * Math.PI * 1.8 * t);
+    tracker.process({
+      t,
+      gravityAcceleration: [0, 0, 9.80665 + v],
+      linearAcceleration: [0, 0, v],
+      gyro: [0, 0, 0],
+      orientation: { alpha: 0, beta: 0, gamma: 0 },
+    });
+  }
   assert.equal(tracker.state.steps, 1);
   assert.equal(tracker.state.distance, 0.7);
 });
-
 test('travel-up rotation puts forward direction above and auto-fit includes rotated route', async () => {
   const { rotateToTravel, fitTrajectory } = await import('../client/maps.js');
   for (const heading of [0, 45, 90, 179, -90]) {
@@ -97,4 +93,15 @@ test('calibration counts steps without drawing and calibrated stride controls di
   const walking = new WalkingTracker({ stepLength: length });
   for (const s of samples) walking.process(s);
   assert.ok(Math.abs(walking.state.distance - 10) < 1e-8);
+});
+test('step detector rejects short spikes and threshold chatter', async () => {
+  const { ImmediateStepDetector } = await import('../client/walking.js');
+  for (const values of [
+    [0, 0, 3, 0, 0],
+    [0, 0.7, 0.6, 0.7, 0.6, 0.7, 0.6, 0],
+  ]) {
+    const d = new ImmediateStepDetector();
+    const peaks = values.flatMap((vertical, i) => d.update({ t: i * 0.02, vertical }));
+    assert.equal(peaks.length, 0);
+  }
 });

@@ -75,16 +75,39 @@ export class WalkingTracker {
   }
 }
 
-// Count every upward acceleration threshold crossing immediately. No gait
-// validation, minimum interval, buffered confirmation or rejected-step logic.
+// Confirm a single acceleration peak, not a multi-step gait window.
 export class ImmediateStepDetector {
   constructor() {
-    this.above = false;
+    this.samples = [];
+    this.trough = 0;
+    this.lastStep = -Infinity;
+    this.risingSince = null;
+    this.armed = true;
   }
   update(sample) {
-    const above = sample.vertical > C.stepThreshold;
-    const crossed = above && !this.above;
-    this.above = above;
-    return crossed ? [{ t: sample.t }] : [];
+    this.trough = Math.min(this.trough, sample.vertical);
+    if (sample.vertical < 0.15) {
+      this.armed = true;
+      this.risingSince = null;
+    } else this.risingSince ??= sample.t;
+    this.samples.push({ ...sample, risingSince: this.risingSince });
+    if (this.samples.length > 3) this.samples.shift();
+    if (this.samples.length < 3) return [];
+    const [a, b, c] = this.samples;
+    if (
+      !this.armed ||
+      b.vertical <= a.vertical ||
+      b.vertical < c.vertical ||
+      b.vertical < C.stepThreshold ||
+      b.vertical - this.trough < C.stepProminence ||
+      b.t - this.lastStep < 0.32 ||
+      b.risingSince === null ||
+      b.t - b.risingSince < 0.06
+    )
+      return [];
+    this.lastStep = b.t;
+    this.armed = false;
+    this.trough = 0;
+    return [{ t: b.t }];
   }
 }
