@@ -18,6 +18,7 @@ const segments = [],
 let build = null,
   phase = 'waiting';
 const openedAt = new Date().toISOString();
+let historyStartedAt = openedAt;
 function archiveSegment(nextPhase) {
   segments.push({
     phase,
@@ -104,7 +105,14 @@ async function connectSensors() {
 }
 $('permission').onclick = connectSensors;
 $('reset').onclick = () => {
-  archiveSegment(calibratedLength !== null ? 'walking' : 'waiting');
+  segments.length = 0;
+  statusEvents.length = 0;
+  markers.length = 0;
+  historyStartedAt = new Date().toISOString();
+  phase = calibratedLength !== null ? 'walking' : 'waiting';
+  $('savedFile').hidden = true;
+  $('savedFile').removeAttribute('href');
+  $('savedFile').textContent = '';
   tracker = new WalkingTracker({
     stepLength: calibratedLength ?? 0.7,
     drawing: calibratedLength !== null,
@@ -163,6 +171,7 @@ function historyPayload() {
     format: 'qsys-sensor-history',
     version: 1,
     openedAt,
+    historyStartedAt,
     exportedAt: new Date().toISOString(),
     build,
     configuration: C,
@@ -204,6 +213,7 @@ $('exportHistory').onclick = () => {
 $('saveServer').onclick = async () => {
   const button = $('saveServer');
   button.disabled = true;
+  const savingHistoryStartedAt = historyStartedAt;
   message('Sparar sensorhistoriken på servern…');
   try {
     const data = historyPayload();
@@ -220,6 +230,7 @@ $('saveServer').onclick = async () => {
           : 'Servern kunde inte spara filen (' + response.status + ').',
       );
     const saved = await response.json();
+    if (savingHistoryStartedAt !== historyStartedAt) return;
     const link = $('savedFile');
     link.href = saved.downloadUrl;
     link.textContent = saved.filename;
