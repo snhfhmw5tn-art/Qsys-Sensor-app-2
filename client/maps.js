@@ -81,6 +81,20 @@ export function fitTrajectory(points, width, height, padding = 48) {
     y: (minY + maxY) / 2,
   };
 }
+// Reveal measured segments without changing their coordinates or rounding turns.
+export function revealedRoute(points, progress) {
+  if (!points.length) return [];
+  const index = Math.min(points.length - 1, Math.max(0, progress));
+  const whole = Math.floor(index),
+    fraction = index - whole;
+  const visible = points.slice(0, whole + 1);
+  if (fraction && points[whole + 1]) {
+    const a = points[whole],
+      b = points[whole + 1];
+    visible.push({ x: a.x + fraction * (b.x - a.x), y: a.y + fraction * (b.y - a.y) });
+  }
+  return visible;
+}
 export class LocalMapRenderer extends IMapRenderer {
   constructor(canvas) {
     super();
@@ -117,9 +131,37 @@ export class LocalMapRenderer extends IMapRenderer {
     canvas.addEventListener('pointerup', this.up);
     canvas.addEventListener('pointercancel', this.up);
   }
-  render(state) {
+  render(state, { instant = false } = {}) {
     this.state = state;
     if (!state) return;
+    const path = state.phoneTrajectory ?? state.trajectory;
+    const now = performance.now();
+    if (this.animationPath !== path) {
+      this.animationPath = path;
+      this.progress = 0;
+      this.animation = null;
+    }
+    if (this.animation) {
+      const k = Math.min(1, (now - this.animation.started) / this.animation.duration);
+      this.progress = this.animation.from + k * (this.animation.to - this.animation.from);
+    }
+    const target = Math.max(0, path.length - 1);
+    if (instant) {
+      this.progress = target;
+      this.animation = null;
+    } else if (target !== this.animation?.to && this.progress < target) {
+      const last = path.at(-1),
+        previous = path[Math.max(0, target - 1)];
+      const duration = Math.max(150, Math.min(700, ((last.t ?? 0) - (previous.t ?? 0)) * 1000));
+      this.animation = { from: this.progress, to: target, started: now, duration };
+    }
+    const orangeDisplay = revealedRoute(path, this.progress);
+    if (this.progress < target && !this.animationFrame) {
+      this.animationFrame = requestAnimationFrame(() => {
+        this.animationFrame = null;
+        this.render(this.state);
+      });
+    }
     this.canvas.style.touchAction = this.follow ? 'pan-y' : 'none';
     const canvas = this.canvas,
       rect = canvas.getBoundingClientRect(),
@@ -220,7 +262,7 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.strokeStyle = '#e8ac61';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    (state.phoneTrajectory ?? []).forEach((p, i) => {
+    orangeDisplay.forEach((p, i) => {
       const q = project(p);
       if (i) ctx.lineTo(q.x, q.y);
       else ctx.moveTo(q.x, q.y);
@@ -246,7 +288,9 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.fillText('START', start.x + 10, start.y + 4);
     if (Number.isFinite(state.deviceHeading)) {
       ctx.save();
-      const phonePosition = project({ x: state.phoneX ?? state.x, y: state.phoneY ?? state.y });
+      const phonePosition = project(
+        orangeDisplay.at(-1) ?? { x: state.phoneX ?? state.x, y: state.phoneY ?? state.y },
+      );
       ctx.translate(phonePosition.x, phonePosition.y);
       ctx.rotate(radians(state.deviceHeading - viewHeading));
       ctx.strokeStyle = '#e8ac61';
@@ -304,6 +348,7 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.fillText(`${scale} m`, w - 30 - scale * this.zoom, h - 43);
   }
   destroy() {
+    if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
     this.resizeObserver.disconnect();
     const c = this.canvas;
     c.removeEventListener('wheel', this.wheel);

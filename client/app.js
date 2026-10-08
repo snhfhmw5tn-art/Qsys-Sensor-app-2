@@ -111,7 +111,10 @@ async function connectSensors() {
 }
 $('permission').onclick = connectSensors;
 function captureMapImage() {
-  map.render({ ...tracker.state, markers: markers.filter((m) => m.segment === segments.length) });
+  map.render(
+    { ...tracker.state, markers: markers.filter((m) => m.segment === segments.length) },
+    { instant: true },
+  );
   return $('map').toDataURL('image/png');
 }
 $('reset').onclick = () => {
