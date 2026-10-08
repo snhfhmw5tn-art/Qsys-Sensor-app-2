@@ -140,6 +140,7 @@ export class LocalMapRenderer extends IMapRenderer {
         [
           ...state.trajectory,
           ...(state.phoneTrajectory ?? []),
+          ...(state.calculatedTrajectory ?? []),
           ...(state.referenceTrajectory ?? []),
           state,
         ].map((p) => rotateToTravel(p, viewHeading)),
@@ -204,6 +205,18 @@ export class LocalMapRenderer extends IMapRenderer {
         ctx.fillRect(p.x, p.y, C.cellSize * this.zoom, C.cellSize * this.zoom);
       }
     ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.strokeStyle = '#56e2c9';
+    ctx.lineWidth = 4;
+    ctx.setLineDash(state.calculatedStatus === 'supported' ? [] : [5, 3]);
+    ctx.beginPath();
+    (state.calculatedTrajectory ?? []).forEach((p, i) => {
+      const q = project(p);
+      if (i) ctx.lineTo(q.x, q.y);
+      else ctx.moveTo(q.x, q.y);
+    });
+    ctx.stroke();
+    ctx.restore();
     ctx.strokeStyle = '#e8ac61';
     ctx.lineWidth = 2;
     ctx.beginPath();

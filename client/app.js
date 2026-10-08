@@ -32,6 +32,14 @@ function archiveSegment(nextPhase) {
 const map = new LocalMapRenderer($('map'));
 function render() {
   const s = tracker.state;
+  const labels = {
+    waiting: 'Grönt: inväntar gångdata.',
+    following: 'Grönt: följer telefonen, ingen greppändring bekräftad.',
+    checking: 'Grönt: kontrollerar ändrat grepp. Sträckan kan korrigeras i efterhand.',
+    uncertain: 'Grönt: osäkert underlag, ingen ny kompensation.',
+    supported: 'Grönt: greppkompensation bekräftad.',
+  };
+  $('calculatedStatus').textContent = labels[s.calculatedStatus ?? 'waiting'];
   map.render({ ...s, markers: markers.filter((m) => m.segment === segments.length) });
   $('markDeviation').disabled = !tracker.drawing;
   $('distance').textContent = s.distance.toLocaleString('sv-SE', {

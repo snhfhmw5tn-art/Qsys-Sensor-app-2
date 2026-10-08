@@ -1,3 +1,4 @@
+import { CompensatedRoute } from './travel.js';
 import {
   SensorPreprocessor,
   HeadingEstimator,
@@ -9,6 +10,7 @@ import { radians, wrap, config as C } from '../shared/config.js';
 export class WalkingTracker {
   constructor({ stepLength = 0.7, drawing = true } = {}) {
     this.stepLength = stepLength;
+    this.calculated = new CompensatedRoute(stepLength);
     this.drawing = drawing;
     this.preprocessor = new SensorPreprocessor();
     this.detector = new GaitStepDetector();
@@ -53,12 +55,14 @@ export class WalkingTracker {
       orientationEvents: this.orientations,
       derived: this.history,
       state: this.state,
+      calculatedDirection: this.calculated.exportHistory(),
     };
   }
   process(raw) {
     if (this.previous !== undefined && raw.t - this.previous > C.maximumSampleGap) {
       this.detector = new GaitStepDetector();
       this.preprocessor.previous = null;
+      this.calculated.resetEvidence();
     }
     this.previous = raw.t;
     this.hasGyro = Array.isArray(raw.gyro);
@@ -66,9 +70,12 @@ export class WalkingTracker {
     const s = this.preprocessor.process(raw);
     this.heading.update(s, null, 'Standing');
     const peaks = this.detector.update(s);
+    this.calculated.update(this.detector.features, this.heading.deviceYaw, s.t, peaks);
     this.history.push({
       t: s.t,
       phoneHeading: this.heading.deviceYaw,
+      calculatedHeadingLive: this.calculated.heading,
+      calculatedStatus: this.calculated.status,
       orientationHeading: this.heading.orientationYaw,
       yawRate: s.yawRate,
       vertical: s.vertical,
@@ -86,6 +93,7 @@ export class WalkingTracker {
       this.state.phoneX += length * Math.sin(radians(phone));
       this.state.phoneY += length * Math.cos(radians(phone));
       this.state.distance += length;
+      this.calculated.append(peak.t, phone, this.state.distance);
       this.state.phoneTrajectory.push({
         x: this.state.phoneX,
         y: this.state.phoneY,
@@ -94,6 +102,9 @@ export class WalkingTracker {
         kind: 'movement',
       });
     }
+    this.state.calculatedTrajectory = this.calculated.trajectory;
+    this.state.calculatedHeading = this.calculated.heading;
+    this.state.calculatedStatus = this.calculated.status;
     this.state.x = this.state.phoneX;
     this.state.y = this.state.phoneY;
     this.state.trajectory = this.state.phoneTrajectory;

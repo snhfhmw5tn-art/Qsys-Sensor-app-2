@@ -163,7 +163,7 @@ test('sensor export preserves raw samples and all orientation events including r
   assert.equal(exported.state.phoneTrajectory.length, 1);
 });
 
-test('walking tracker exports only the phone-based route without calculated travel', () => {
+test('orange state remains phone-based alongside the independent calculated route', () => {
   const tracker = new WalkingTracker();
   for (const sample of demoSamples()) tracker.process(sample);
   assert.deepEqual(tracker.state.trajectory, tracker.state.phoneTrajectory);
@@ -171,6 +171,8 @@ test('walking tracker exports only the phone-based route without calculated trav
   assert.equal(tracker.travel, undefined);
   const data = tracker.exportHistory();
   assert.equal(data.greenDirection, undefined);
+  assert.ok(data.calculatedDirection);
+  assert.ok(data.state.calculatedTrajectory.length > 1);
   assert.ok(
     data.derived.every(
       (row) => row.travelHeading === undefined && row.directionAnalysis === undefined,

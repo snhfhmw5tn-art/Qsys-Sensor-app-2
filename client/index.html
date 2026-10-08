@@ -60,6 +60,7 @@
         <canvas id="map" aria-label="Gångspår med telefonens riktning"></canvas
         ><span class="map-label">STARTENS RIKTNING ↑ · METER</span>
       </div>
+      <p id="calculatedStatus" role="status">Inväntar gångdata.</p>
       <section id="mapTools">
         <div class="controls" style="margin-top: 12px">
           <button id="markDeviation" disabled>Lägg markör på orange linje</button>
@@ -71,7 +72,10 @@
         <p><a id="savedFile" hidden download></a></p>
         <div class="map-options">
           <label><input id="autoZoom" type="checkbox" checked /> Autozoom – visa hela spåret</label
-          ><span><i class="orange">━ ▯</i> Telefonbaserat spår</span>
+          ><span
+            ><i class="orange">━ ▯</i> Telefonbaserat spår · <i class="green">━</i> Kompenserat
+            spår</span
+          >
         </div>
         <p class="note">
           Sträckan räknas med vald steglängd, från start 0,76 m/steg. Kartan visar relativ rörelse.
