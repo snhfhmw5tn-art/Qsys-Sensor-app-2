@@ -37,18 +37,16 @@ export class WalkingTracker {
       heatmap: [],
     };
   }
-  orient(orientation, t) {
-    this.orientations.push({ t, ...structuredClone(orientation) });
+  orient(orientation, t, record = true) {
+    if (record) this.orientations.push({ t, ...structuredClone(orientation) });
     this.attitude.update({ orientation, gyro: null, yawRate: 0, dt: 0 }, null, 'Standing');
     this.attitudeOffset ??= this.heading.deviceYaw;
+    // Orange is the relative sensor heading, without jump rejection,
+    // gait-axis steering, turn classification or mounting compensation.
     const target = wrap(this.attitude.deviceYaw + this.attitudeOffset);
-    // Small, current attitude corrections remove integration lag without accepting
-    // abrupt compass jumps. Gyro prediction continues between attitude events.
-    if (!this.hasGyro || Math.abs(wrap(target - this.heading.deviceYaw)) < 25) {
-      this.heading.deviceYaw = target;
-      this.state.deviceHeading = target;
-      this.history.push({ t, phoneHeading: target });
-    }
+    this.heading.deviceYaw = target;
+    this.state.deviceHeading = target;
+    if (record) this.history.push({ t, phoneHeading: target });
   }
   exportHistory() {
     return {
@@ -72,6 +70,7 @@ export class WalkingTracker {
     this.raw.push(structuredClone(raw));
     const s = this.preprocessor.process(raw);
     this.heading.update(s, null, 'Standing');
+    if (s.orientation) this.orient(s.orientation, s.t, false);
     const peaks = this.detector.update(s);
     this.calculated.update(this.detector.features, this.heading.deviceYaw, s.t, peaks, s);
     this.history.push({

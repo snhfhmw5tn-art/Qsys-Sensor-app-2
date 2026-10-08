@@ -31,3 +31,5 @@ The green route uses per-step navigation-frame PCA during normal gait, integrate
 This implements the paper's three-strategy structure with explicit browser substitutions: browser attitude instead of raw magnetometer/EKF, experimental thresholds instead of a trained carrying classifier, and gyro continuity instead of the pocket-specific PCA phase-sign method. Simultaneous turns and grip changes remain ambiguous. Synthetic tests do not establish real walking accuracy.
 
 See [research sources, implementation mapping and limitations](docs/heading-research.md).
+
+Orange reference now follows every browser orientation reading relative to its initial orientation, without the previous 25-degree jump rejection. Motion samples carrying orientation use the same direct attitude path. When orientation is unavailable the existing gyro heading is a fallback. No green heading, turn classifier or mounting offset is applied to orange. Browser/OS sensor fusion itself is outside app control.

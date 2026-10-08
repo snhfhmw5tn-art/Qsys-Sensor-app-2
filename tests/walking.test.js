@@ -37,7 +37,7 @@ test('orientation rotates indicator immediately without waiting for motion or st
   assert.ok(Math.abs(tracker.state.deviceHeading + 90) < 1e-8);
   assert.equal(tracker.state.distance, 0);
 });
-test('attitude corrects small gyro error immediately but rejects compass jumps', () => {
+test('orange reference accepts large orientation changes immediately without jump compensation', () => {
   const tracker = new WalkingTracker();
   tracker.orient({ alpha: 0, beta: 90, gamma: 0 }, 0);
   tracker.hasGyro = true;
@@ -45,7 +45,7 @@ test('attitude corrects small gyro error immediately but rejects compass jumps',
   tracker.orient({ alpha: 20, beta: 90, gamma: 0 }, 0.1);
   assert.ok(Math.abs(tracker.state.deviceHeading + 20) < 1e-8);
   tracker.orient({ alpha: 130, beta: 90, gamma: 0 }, 0.2);
-  assert.ok(Math.abs(tracker.state.deviceHeading + 20) < 1e-8);
+  assert.ok(Math.abs(tracker.state.deviceHeading + 130) < 1e-8);
 });
 test('single vertical pulse is insufficient walking evidence', () => {
   const tracker = new WalkingTracker();
