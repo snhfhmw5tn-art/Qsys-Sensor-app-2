@@ -34,11 +34,11 @@ function render() {
   const s = tracker.state;
   const labels = {
     waiting: 'Grönt: inväntar gångdata.',
-    following: 'Grönt: följer telefonen, ingen greppändring bekräftad.',
-    checking: 'Grönt: kontrollerar ändrat grepp. Sträckan kan korrigeras i efterhand.',
-    uncertain: 'Grönt: osäkert underlag, ingen ny kompensation.',
+    following: 'Grönt: inväntar tillräckligt gångunderlag.',
+    checking: 'Grönt: telefonrörelse, inväntar normala steg för efterhandskorrigering.',
+    uncertain: 'Grönt: osäkert underlag, behåller senaste färdriktning.',
     turning: 'Grönt: sväng registrerad med gyroskopet.',
-    supported: 'Grönt: greppkompensation bekräftad.',
+    supported: 'Grönt: färdriktning från gångens acceleration.',
   };
   $('calculatedStatus').textContent = labels[s.calculatedStatus ?? 'waiting'];
   map.render({ ...s, markers: markers.filter((m) => m.segment === segments.length) });

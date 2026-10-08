@@ -11,28 +11,23 @@ Reviewed 2026-10-08. The active green estimator is a **browser adaptation**, not
 - Herath et al., ICRA 2020, [RoNIN](https://arxiv.org/abs/1905.12853), [code](https://github.com/Sachini/ronin). Learned inertial position and heading models and evaluation datasets. A candidate for separate offline evaluation; no RoNIN model is installed or run by this app.
 - Yan et al., ECCV 2018, [RIDI](https://yanhangpublic.github.io/ridi/index.html). Learns velocity from acceleration and angular-velocity histories and corrects acceleration bias before integration. Not implemented here.
 
-## Implemented adaptation
+## Active implementation: three-strategy browser variant
 
-`client/travel.js` selects motion states using a separate raw-sample buffer. Acceleration is already rotated into the navigation frame by `SensorPreprocessor`. Confirmed footfall intervals determine the analysis duration (two periods) and refresh interval (one period), giving approximately 50% overlap despite irregular browser events.
+Model identifier: `deng-2018-three-strategy-browser-v1`. This supersedes both previous per-step/offset hybrids and the orange-plus-offset estimator.
 
-Each window records horizontal PCA, anisotropy, acceleration energy, accumulated tilt and gravity-axis gyro rotation. Gravity direction rather than raw Euler differences measures tilt, avoiding angle-wrap artifacts. Thresholds are experimental implementation choices, not published validated constants. Tilt/energy disturbances and disagreement between device rotation and gait axis delay mounting decisions. Continuing turns with compatible gait evidence preserve gyro-based heading without waiting for the phone to settle. Stable neighboring gait windows support a new grip offset and retrospective reconstruction of the affected green steps. Raw input, decisions, references and correction intervals are exported.
+- Normal gait: each confirmed step uses PCA of navigation-frame horizontal acceleration. Initial reliable gait establishes alignment to the map's initial zero direction. Subsequent PCA directions are not recalibrated to the phone's current heading.
+- Turns: integrate the gravity-axis gyroscope between the original timestamps of successive footfalls and add that change to the previous travel heading. Gyro integrals are stored with raw processed samples, so delayed footfall confirmations cannot include later rotation.
+- Hand movement / position transition: hold the previous travel direction provisionally. Overlapping classification windows may retrospectively reclassify recent steps. When two normal steps exist before and two after the disturbance, circular-average those four headings and rebuild the affected green route (section 4.2, K=4). Do not average across turns or sensor gaps. If surrounding evidence is missing or inconsistent, the disturbance remains pending.
+- Outliers: remove an isolated heading excursion with large opposite adjacent changes and agreeing neighbors. Preserve sustained turns (section 4.3).
+- Classification uses windows of twice the measured step period, refreshed once per period (50% overlap). It records accumulated tilt, horizontal yaw, acceleration energy and gait-axis evidence.
+- Arrow, green trajectory and exported headings use the same calculated travel heading. Orange processing, orange markers and step detection remain unchanged.
 
-The orange route, step detector, stride, orange markers and map coordinate system are unchanged. Green remains provisional before sufficient evidence exists. Delayed confirmed steps are used at their original timestamps.
+## Explicit differences from the complete paper
 
-## Differences and unresolved cases
+The browser supplies attitude instead of the paper's raw magnetometer/quaternion EKF. The carrying-state classifier uses experimental thresholds, not a trained Random Forest. PCA sign is selected by gyro continuity, not the pocket-specific vertical/forward phase method from RMPCA. Initial reliable gait defines relative zero; there is no external absolute-heading anchor. These differences are recorded in every export. Do not describe this as a bit-for-bit reproduction or claim the paper's accuracy.
 
-- Uses browser-provided attitude and the existing gyro heading filter, not the paper's raw magnetometer/quaternion EKF.
-- Uses an explicit threshold classifier, not a trained Random Forest carrying-position classifier. There is no automatic validated pocket/calling/swinging model.
-- Normal walking uses navigation-frame PCA over each confirmed step, with a fixed initial frame alignment, quality checks and continuity-based sign selection. An isolated heading outlier is corrected from its neighboring normal steps. Mounting corrections average stable neighboring windows rather than reproducing the paper's four-normal-step filter exactly.
-- Does not implement the pocket-specific vertical/forward phase method for resolving the PCA axis sign. Ambiguous reversals remain uncertain; gyro turn evidence helps but does not prove body rotation.
-- Simultaneous body turns and phone repositioning, pure horizontal hand rotations, weak gait and magnetic/attitude errors can still be confused. No universal accuracy guarantee follows from these papers.
+Simultaneous phone repositioning and body turning violate a central assumption of the paper and remain ambiguous. Pure horizontal hand rotation, weak gait, changing acceleration patterns, attitude errors and reversals can still be misclassified. A disturbance without sufficient normal neighbors is left pending rather than guessed.
 
-## Validation
+## Verification
 
-Automated tests cover raw two-step window decisions, a 37-degree grip change while walking straight, retrospective reconstruction, a continuing 90-degree turn, isolated disturbances, ambiguous reversals and evidence reset after a sensor gap. These are synthetic regression tests, not measured walking accuracy.
-
-Before claiming improved real-world accuracy, replay labeled recordings with known straight segments, partial/90/180-degree turns and independently changed phone poses; measure heading error, route error, false corrections and decision delay. Compare against the same unchanged orange baseline. Test simultaneous turns and grip changes separately. Existing recordings without labeled ground truth cannot establish exact accuracy.
-
-## Correction after walking feedback
-
-The per-step PCA steering stage was removed: it could make green diverge from orange even without a phone repositioning. Green now integrates exactly the same phone headings and stride as orange, subtracting only a confirmed grip offset. Window PCA remains diagnostic evidence for offset confirmation, not an independent heading source. This supersedes the earlier per-step PCA description above. The arrow uses the same compensated heading. Regression tests require exact point-for-point equivalence through a body turn before any grip correction, and no route drift when the gait axis fluctuates with fixed phone heading.
+Synthetic tests cover acceleration-derived normal headings independent of phone yaw, arbitrary grip changes with four-neighbor reconstruction, 45/90/180-degree and left turns, gyro sign, delayed step confirmations, unreliable orientation, isolated outliers versus sustained turns, sensor gaps and exported diagnostics. These do not establish real-world walking accuracy. Replay labeled measured routes and test physical phone poses before making accuracy claims.

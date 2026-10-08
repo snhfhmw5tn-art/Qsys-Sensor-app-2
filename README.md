@@ -24,10 +24,10 @@ Under Felsökning finns Exportera all sensorhistorik och Markera avvikelse. JSON
 
 Knappen Spara till fil på servern vid kartan sparar sensorhistoriken sedan senaste Ny karta och aktuell kartbild i DATA_DIR/sensor-history. Ange ett testnamn, t.ex. gangkarta-uppratt-telefon. Filens nedladdningsnamn får Stockholm-datum, klockslag och ett unikt suffix. En svårgissad nedladdningslänk returneras; ingen offentlig fillista finns. Max 25 MB per uppladdning. Vid större filer finns lokal export. Backendändringar publiceras med publish-client-iis.ps1 -IncludeServer, vilket återstartar app-poolen och bevarar IIS-bindningar.
 
-## Current green estimator (2026-10-08)
+## Current green estimator (2018 three-strategy method)
 
-The calculated green line and arrow use a browser adaptation of Deng et al. (2018): the unchanged orange step headings plus a separately confirmed grip offset. Navigation-frame acceleration and overlapping two-step motion-classification windows are used only to confirm grip changes, never to steer normal steps. Confirmed offsets retrospectively redraw green. Sensor exports include window decisions and individual step estimates. Orange integration and its markers remain unchanged.
+The green route uses per-step navigation-frame PCA during normal gait, integrated gravity-axis gyro during turns, and retrospective correction from four surrounding normal steps during phone repositioning/hand movement. An adjacent-step filter removes isolated heading outliers. Orange processing and its numbered markers are unchanged. Exported history includes strategy selection, original step times, gyro deltas, provisional/corrected headings and correction events.
 
-The adaptation is not the paper's complete sensor stack: browser attitude replaces its magnetometer/EKF pipeline, carrying states use experimental thresholds instead of a trained classifier, and PCA sign selection uses heading continuity rather than a pocket-specific phase model. Simultaneous turns and grip changes remain difficult. Synthetic regression tests do not establish real walking accuracy.
+This implements the paper's three-strategy structure with explicit browser substitutions: browser attitude instead of raw magnetometer/EKF, experimental thresholds instead of a trained carrying classifier, and gyro continuity instead of the pocket-specific PCA phase-sign method. Simultaneous turns and grip changes remain ambiguous. Synthetic tests do not establish real walking accuracy.
 
 See [research sources, implementation mapping and limitations](docs/heading-research.md).
