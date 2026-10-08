@@ -153,3 +153,21 @@ details p {
     font-size: 28px;
   }
 }
+
+.calibration {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #36515e;
+  border-radius: 12px;
+  background: #192c39;
+}
+.calibration input {
+  width: 110px;
+  font: inherit;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #45616c;
+}
+.calibration .controls {
+  margin-top: 14px;
+}

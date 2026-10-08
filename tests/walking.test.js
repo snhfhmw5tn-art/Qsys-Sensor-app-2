@@ -86,3 +86,15 @@ test('travel-up rotation puts forward direction above and auto-fit includes rota
     }
   }
 });
+test('calibration counts steps without drawing and calibrated stride controls distance', () => {
+  const calibration = new WalkingTracker({ drawing: false });
+  const samples = demoSamples();
+  for (const s of samples) calibration.process(s);
+  assert.ok(calibration.state.steps > 0);
+  assert.equal(calibration.state.distance, 0);
+  assert.equal(calibration.state.trajectory.length, 1);
+  const length = 10 / calibration.state.steps;
+  const walking = new WalkingTracker({ stepLength: length });
+  for (const s of samples) walking.process(s);
+  assert.ok(Math.abs(walking.state.distance - 10) < 1e-8);
+});

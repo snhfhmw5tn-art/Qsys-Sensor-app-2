@@ -1,7 +1,9 @@
 import { SensorPreprocessor, HeadingEstimator } from './pipeline.js';
 import { radians, wrap, config as C } from '../shared/config.js';
 export class WalkingTracker {
-  constructor() {
+  constructor({ stepLength = 0.7, drawing = true } = {}) {
+    this.stepLength = stepLength;
+    this.drawing = drawing;
     this.preprocessor = new SensorPreprocessor();
     this.detector = new ImmediateStepDetector();
     this.heading = new HeadingEstimator();
@@ -53,11 +55,12 @@ export class WalkingTracker {
     });
     for (const peak of this.detector.update(s)) {
       const h = this.history.findLast((p) => p.t <= peak.t)?.phoneHeading ?? this.heading.deviceYaw;
-      const length = 0.7;
+      this.state.steps++;
+      if (!this.drawing) continue;
+      const length = this.stepLength;
       this.state.x += length * Math.sin(radians(h));
       this.state.y += length * Math.cos(radians(h));
       this.state.distance += length;
-      this.state.steps++;
       this.state.trajectory.push({
         x: this.state.x,
         y: this.state.y,

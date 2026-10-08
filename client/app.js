@@ -2,7 +2,10 @@ import { WalkingTracker } from './walking.js';
 import { LiveSensorSource } from './sources.js';
 import { LocalMapRenderer } from './maps.js';
 const $ = (id) => document.getElementById(id);
-let tracker = new WalkingTracker(),
+let tracker = new WalkingTracker({ drawing: false }),
+  calibratedLength = null,
+  calibrating = false,
+  calibrationMeters = 0,
   source = null,
   running = false,
   starting = false,
@@ -18,6 +21,8 @@ function render() {
   });
   $('steps').textContent = s.steps;
   $('heading').textContent = Math.round(s.deviceHeading) + '°';
+  $('calibrationSteps').textContent = calibrating ? s.steps : 0;
+  $('finishCalibration').disabled = !calibrating || !s.steps;
 }
 function message(text) {
   $('message').textContent = text;
@@ -62,7 +67,7 @@ async function connectSensors() {
     running = true;
     $('permission').hidden = true;
     $('status').textContent = 'Loggar';
-    message('Loggar sensorer. Börja gå med telefonen riktad framåt.');
+    message('Sensorerna är anslutna. Kalibrera steglängden innan kartan börjar ritas.');
   } catch (error) {
     source?.stop();
     source = null;
@@ -76,14 +81,51 @@ async function connectSensors() {
 }
 $('permission').onclick = connectSensors;
 $('reset').onclick = () => {
-  tracker = new WalkingTracker();
+  tracker = new WalkingTracker({
+    stepLength: calibratedLength ?? 0.7,
+    drawing: calibratedLength !== null,
+  });
+  calibrating = false;
+  $('beginCalibration').disabled = false;
+  $('calibrationMeters').disabled = false;
   sampleOrigin = null;
   render();
   message(
     running
-      ? 'Ny karta. Sensorerna fortsätter logga direkt.'
+      ? calibratedLength !== null
+        ? 'Ny karta. Ritningen fortsätter med kalibrerad steglängd.'
+        : 'Kalibrera steglängden innan du börjar.'
       : 'Ny karta. Inväntar sensorbehörighet.',
   );
+};
+$('beginCalibration').onclick = () => {
+  const meters = Number($('calibrationMeters').value);
+  if (!Number.isFinite(meters) || meters <= 0) {
+    message('Ange en sträcka större än noll meter.');
+    return;
+  }
+  if (!running) connectSensors();
+  calibrationMeters = meters;
+  calibrating = true;
+  tracker = new WalkingTracker({ drawing: false });
+  sampleOrigin = null;
+  $('beginCalibration').disabled = true;
+  $('calibrationMeters').disabled = true;
+  message('Gå ' + meters.toLocaleString('sv-SE') + ' meter. Tryck sedan Klar – börja rita.');
+  render();
+};
+$('finishCalibration').onclick = () => {
+  if (!calibrating || !tracker.state.steps) return;
+  calibratedLength = calibrationMeters / tracker.state.steps;
+  $('stride').textContent =
+    calibratedLength.toLocaleString('sv-SE', { maximumFractionDigits: 3 }) + ' m/steg';
+  calibrating = false;
+  tracker = new WalkingTracker({ stepLength: calibratedLength });
+  sampleOrigin = null;
+  $('beginCalibration').disabled = false;
+  $('calibrationMeters').disabled = false;
+  message('Kalibrering klar. Kartan ritas nu med din steglängd.');
+  render();
 };
 $('autoZoom').onchange = () => {
   map.follow = $('autoZoom').checked;

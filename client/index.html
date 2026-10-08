@@ -23,6 +23,31 @@
         <button id="reset">Ny karta</button>
       </div>
       <p id="message" role="status">Sensorerna kräver HTTPS. Ingen GPS används.</p>
+      <section class="calibration" aria-label="Stegkalibrering">
+        <strong>1. Kalibrera steglängden</strong>
+        <p>
+          Ange en känd sträcka. Gå sträckan medan appen räknar stegen, avsluta sedan för att börja
+          rita.
+        </p>
+        <label
+          >Sträcka (meter)
+          <input
+            id="calibrationMeters"
+            type="number"
+            min="0.1"
+            step="any"
+            value="10"
+            inputmode="decimal"
+        /></label>
+        <div class="controls">
+          <button id="beginCalibration">Börja kalibrering</button
+          ><button id="finishCalibration" disabled>Klar – börja rita</button>
+        </div>
+        <p>
+          Kalibreringssteg: <b id="calibrationSteps">0</b> · Steglängd:
+          <b id="stride">Ej kalibrerad</b>
+        </p>
+      </section>
       <section class="stats" aria-label="Mätning">
         <div><b id="distance">0,0</b><span>meter · uppskattat</span></div>
         <div><b id="steps">0</b><span>steg</span></div>
@@ -37,8 +62,8 @@
         ><span><i class="green">━</i> Gångspår <i class="orange">▯</i> Telefon</span>
       </div>
       <p class="note">
-        Sträckan räknas med 0,70 m per steg. Kartan visar relativ rörelse. Telefonvridningar kan
-        påverka spåret.
+        Sträckan räknas med din kalibrerade steglängd. Kartan visar relativ rörelse.
+        Telefonvridningar kan påverka spåret.
       </p>
       <details>
         <summary>Felsökning</summary>
