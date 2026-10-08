@@ -32,6 +32,16 @@ function archiveSegment(nextPhase) {
 const map = new LocalMapRenderer($('map'));
 function render() {
   const s = tracker.state;
+  $('activity').textContent = s.activity.label;
+  $('activityProbability').textContent =
+    'Uppskattad sannolikhet: ' +
+    (s.activity.probability ? Math.round(s.activity.probability * 100) + ' %' : '—');
+  $('activityNote').textContent = s.vehicle
+    ? 'Experimentell fordonssträcka från acceleration. Antagen starthastighet 0; mätfel driver över tid. ' +
+      (s.vehicle.valid
+        ? 'Uppskattad hastighet: ' + (s.vehicle.speed * 3.6).toFixed(1) + ' km/h.'
+        : 'Inväntar giltig orientering och sammanhängande sensordata.')
+    : 'Preliminär sensorbedömning, inte validerad sannolikhet. Vagn och truck kan inte skiljas säkert automatiskt.';
   map.render({ ...s, markers: markers.filter((m) => m.segment === segments.length) });
   $('markDeviation').disabled = !tracker.drawing;
   $('distance').textContent = s.distance.toLocaleString('sv-SE', {
@@ -63,6 +73,7 @@ async function connectSensors() {
     (sample) => {
       sampleOrigin ??= sample.t;
       sample = { ...sample, sourceT: sample.t, t: sample.t - sampleOrigin };
+      tracker.transportType = $('transportType').value;
       tracker.process(sample);
       scheduleRender();
     },

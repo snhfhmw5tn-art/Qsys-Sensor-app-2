@@ -68,7 +68,7 @@ summary:focus-visible {
 }
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 20px 0;
 }
@@ -174,4 +174,14 @@ details p {
 
 [hidden] {
   display: none !important;
+}
+
+#activity {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

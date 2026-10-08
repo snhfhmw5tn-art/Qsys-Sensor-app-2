@@ -1,3 +1,5 @@
+import { VehicleDistance } from './vehicle.js';
+import { ActivityEstimator } from './activity.js';
 import {
   SensorPreprocessor,
   HeadingEstimator,
@@ -9,6 +11,10 @@ import { radians, wrap, config as C } from '../shared/config.js';
 export class WalkingTracker {
   constructor({ stepLength = 0.7, drawing = true } = {}) {
     this.stepLength = stepLength;
+    this.activity = new ActivityEstimator();
+    this.vehicle = new VehicleDistance();
+    this.wasVehicle = false;
+    this.transportType = 'Auto';
     this.drawing = drawing;
     this.preprocessor = new SensorPreprocessor();
     this.detector = new GaitStepDetector();
@@ -30,6 +36,8 @@ export class WalkingTracker {
       phoneTrajectory: [{ x: 0, y: 0, t: 0, distance: 0, kind: 'start' }],
       trajectory: [{ x: 0, y: 0, t: 0, distance: 0, kind: 'start' }],
       heatmap: [],
+      activity: this.activity.current,
+      distanceAvailable: true,
     };
   }
   orient(orientation, t, record = true) {
@@ -76,6 +84,36 @@ export class WalkingTracker {
         this.orient(s.orientation, orientationTime, false);
     }
     const peaks = this.detector.update(s);
+    this.state.activity = this.activity.update(
+      this.detector.features,
+      s.t,
+      this.transportType,
+      this.wasVehicle && this.vehicle.speed > 0.1,
+    );
+    const vehicle =
+      ['Cart', 'Forklift', 'VehicleUnknown'].includes(this.state.activity.mode) ||
+      ['Cart', 'Forklift'].includes(this.transportType);
+    if (vehicle !== this.wasVehicle) this.vehicle.reset();
+    const vehicleEstimate = vehicle ? this.vehicle.update(s, this.transportType) : null;
+    this.wasVehicle = vehicle;
+    this.state.vehicle = vehicleEstimate;
+    this.state.distanceAvailable = !vehicle || vehicleEstimate.valid;
+    if (vehicleEstimate?.distance > 0 && this.drawing) {
+      const distance = vehicleEstimate.distance;
+      const phone = this.heading.deviceYaw;
+      this.state.phoneX += distance * Math.sin(radians(phone));
+      this.state.phoneY += distance * Math.cos(radians(phone));
+      this.state.distance += distance;
+      this.state.phoneTrajectory.push({
+        x: this.state.phoneX,
+        y: this.state.phoneY,
+        t: s.t,
+        distance: this.state.distance,
+        kind: 'movement',
+        source: 'experimental-acceleration',
+      });
+    }
+
     this.history.push({
       t: s.t,
       phoneHeading: this.heading.deviceYaw,
@@ -86,12 +124,15 @@ export class WalkingTracker {
       bias: [...this.preprocessor.bias],
       features: this.detector.features,
       confirmedSteps: peaks.map((p) => p.t),
+      activity: this.state.activity,
+      distanceAvailable: this.state.distanceAvailable,
+      vehicle: vehicleEstimate,
     });
     for (const peak of peaks) {
       const atStep = this.history.findLast((p) => p.t <= peak.t && Number.isFinite(p.phoneHeading));
       const phone = atStep?.phoneHeading ?? this.heading.deviceYaw;
       this.state.steps++;
-      if (!this.drawing) continue;
+      if (!this.drawing || vehicle) continue;
       const length = this.stepLength;
       this.state.phoneX += length * Math.sin(radians(phone));
       this.state.phoneY += length * Math.cos(radians(phone));

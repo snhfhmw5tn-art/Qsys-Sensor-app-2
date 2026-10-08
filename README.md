@@ -27,3 +27,11 @@ Knappen Spara till fil på servern vid kartan sparar sensorhistoriken sedan sena
 ## Active map
 
 Only the orange phone-direction reference is calculated and displayed. The calculated green route, arrow, status and exported estimates have been removed from the active flow. The experimental estimator source and its tests remain available for reference but are not imported by the app. Orange animation, calibration, markers and raw sensor history remain available.
+
+## Activity and experimental vehicle distance
+
+A fourth measurement card shows standing, walking, running, cart/forklift or uncertainty and a heuristic percentage. Scores are normalized experimental rules, not calibrated probabilities or a trained activity model. Generic IMU data cannot reliably distinguish cart from forklift; Auto reports their combined category and separate scores are exported. An optional known transport selector supplies an explicit operator prior. A cart means the handset is on a cart pushed by a walking person.
+
+Cart and forklift distance never uses step length. It integrates gravity-free navigation-frame acceleration to velocity and then integrates speed over time, drawing along the existing orange phone heading. Initial velocity is assumed zero when entering vehicle mode. Low-pass filtering, an acceleration deadband and explicit cart/truck speed caps reduce runaway spikes but cannot eliminate inertial drift. Quiet readings do not reset velocity: constant-speed travel can be quiet. Missing attitude or sensor gaps reset integration without inventing distance. Speed, quality flags, selected activity and heuristic scores are included in sensor history. Changing stride does not change vehicle distance. No GPS is requested.
+
+For useful tests, start the vehicle stationary and keep the handset fixed on it. Sensor bias, bumps and unknown initial speed can cause substantial errors; vehicle distance is experimental. See Android's [motion sensor documentation](https://developer.android.com/develop/sensors-and-location/sensors/sensors_motion) for acceleration offset and calibration requirements.

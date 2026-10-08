@@ -55,7 +55,25 @@
         <div><b id="distance">0,0</b><span>meter · uppskattat</span></div>
         <div><b id="steps">0</b><span>steg</span></div>
         <div><b id="heading">0°</b><span>telefonriktning</span></div>
+        <div>
+          <b id="activity">Inväntar data</b
+          ><span id="activityProbability">Uppskattad sannolikhet: —</span>
+        </div>
       </section>
+      <div class="controls">
+        <label
+          >Känt transportsätt (valfritt)
+          <select id="transportType">
+            <option value="Auto">Automatiskt</option>
+            <option value="Cart">Vagn</option>
+            <option value="Forklift">Truck</option>
+          </select>
+        </label>
+      </div>
+      <p class="note" id="activityNote">
+        Sannolikheten är en preliminär sensorbedömning. Vagn och truck kan inte skiljas säkert
+        automatiskt. Fordonssträcka beräknas experimentellt från acceleration, utan steglängd.
+      </p>
       <div class="map-wrap" id="mapView">
         <canvas id="map" aria-label="Gångspår med telefonens riktning"></canvas
         ><span class="map-label">STARTENS RIKTNING ↑ · METER</span>

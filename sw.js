@@ -1,4 +1,4 @@
-const CACHE = 'qsys-motion-v56';
+const CACHE = 'qsys-motion-v57';
 const FILES = [
   '/',
   '/client/style.css',
@@ -6,6 +6,8 @@ const FILES = [
   '/client/pipeline.js',
   '/client/sources.js',
   '/client/walking.js',
+  '/client/activity.js',
+  '/client/vehicle.js',
   '/client/maps.js',
   '/shared/config.js',
 ];
