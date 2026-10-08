@@ -395,6 +395,7 @@ input:not([type='checkbox']) {
 .map-bottom {
   padding: 14px 20px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -405,6 +406,9 @@ input:not([type='checkbox']) {
 .map-bottom b {
   color: #3d5967;
   font-weight: 500;
+}
+.map-bottom > label {
+  flex-basis: 100%;
 }
 .heatmap-control {
   display: flex;

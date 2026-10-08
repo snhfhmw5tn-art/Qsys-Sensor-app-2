@@ -69,15 +69,15 @@ export class LocalMapRenderer extends IMapRenderer {
     this.resizeObserver = new ResizeObserver(() => this.render(this.state));
     this.resizeObserver.observe(canvas);
     this.wheel = (e) => {
+      if (this.follow) return;
       e.preventDefault();
-      this.follow = false;
       this.zoom = Math.max(2, Math.min(120, this.zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
       this.render(this.state);
     };
     this.down = (e) => {
+      if (this.follow) return;
       this.pointer = { x: e.clientX, y: e.clientY };
       canvas.setPointerCapture(e.pointerId);
-      this.follow = false;
     };
     this.drag = (e) => {
       if (!this.pointer) return;
@@ -96,6 +96,7 @@ export class LocalMapRenderer extends IMapRenderer {
   render(state) {
     this.state = state;
     if (!state) return;
+    this.canvas.style.touchAction = this.follow ? 'pan-y' : 'none';
     const canvas = this.canvas,
       rect = canvas.getBoundingClientRect(),
       dpr = devicePixelRatio || 1,
@@ -300,8 +301,10 @@ export class GoogleMapsRenderer extends IMapRenderer {
     const bounds = new google.maps.LatLngBounds();
     for (const p of s.trajectory) bounds.extend(geo(p));
     bounds.extend(position);
-    this.map.fitBounds(bounds, 48);
-    if (this.map.getZoom() > 20) this.map.setZoom(20);
+    if (this.follow !== false) {
+      this.map.fitBounds(bounds, 48);
+      if (this.map.getZoom() > 20) this.map.setZoom(20);
+    }
     add(
       new google.maps.Polyline({
         map: this.map,

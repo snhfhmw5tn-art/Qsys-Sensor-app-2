@@ -5,7 +5,43 @@ import {
   CoordinateTransformer,
   MotionFeatureExtractor,
 } from '../client/pipeline.js';
-import { fitTrajectory } from '../client/maps.js';
+import { fitTrajectory, LocalMapRenderer } from '../client/maps.js';
+
+test('touch and page scroll cannot silently disable automatic route fitting', () => {
+  const previous = globalThis.ResizeObserver;
+  globalThis.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    let captured = false,
+      prevented = false;
+    const canvas = {
+      addEventListener() {},
+      removeEventListener() {},
+      setPointerCapture() {
+        captured = true;
+      },
+    };
+    const renderer = new LocalMapRenderer(canvas);
+    renderer.wheel({
+      deltaY: 100,
+      preventDefault() {
+        prevented = true;
+      },
+    });
+    renderer.down({ clientX: 30, clientY: 50, pointerId: 1 });
+    renderer.drag({ clientX: 35, clientY: 90 });
+    assert.equal(renderer.follow, true);
+    assert.equal(prevented, false);
+    assert.equal(captured, false);
+    assert.deepEqual(renderer.pan, { x: 0, y: 0 });
+    renderer.destroy();
+  } finally {
+    if (previous === undefined) delete globalThis.ResizeObserver;
+    else globalThis.ResizeObserver = previous;
+  }
+});
 
 const feature = (heading) => ({
   orientationReliable: true,

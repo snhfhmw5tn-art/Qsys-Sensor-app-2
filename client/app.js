@@ -208,6 +208,7 @@ function fallbackMap(reason) {
   $('map').hidden = false;
   $('background').value = 'local';
   renderer = new LocalMapRenderer($('map'));
+  renderer.follow = $('autoZoom').checked;
   renderer.heat = document.querySelector('[data-heat].selected').dataset.heat;
   renderer.render(state);
   notice(`Google Maps unavailable. Tracking continues. ${reason}`, true);
@@ -275,6 +276,8 @@ async function newSession() {
 }
 async function start(kind) {
   if (running) return;
+  renderer.follow = true;
+  $('autoZoom').checked = true;
   pipeline = null;
   running = true;
   mode = kind;
@@ -521,6 +524,7 @@ for (const b of document.querySelectorAll('[data-heat]'))
 $('zoomIn').onclick = () => {
   if (renderer instanceof LocalMapRenderer) {
     renderer.follow = false;
+    $('autoZoom').checked = false;
     renderer.zoom = Math.min(120, renderer.zoom * 1.25);
     renderer.render(state);
   }
@@ -528,12 +532,18 @@ $('zoomIn').onclick = () => {
 $('zoomOut').onclick = () => {
   if (renderer instanceof LocalMapRenderer) {
     renderer.follow = false;
+    $('autoZoom').checked = false;
     renderer.zoom = Math.max(2, renderer.zoom / 1.25);
     renderer.render(state);
   }
 };
 $('recenter').onclick = () => {
   renderer.follow = true;
+  $('autoZoom').checked = true;
+  renderer.render(state);
+};
+$('autoZoom').onchange = () => {
+  renderer.follow = $('autoZoom').checked;
   renderer.render(state);
 };
 $('background').onchange = safely(async () => {
