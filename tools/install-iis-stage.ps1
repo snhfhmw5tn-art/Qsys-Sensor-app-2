@@ -8,7 +8,7 @@ try {
     $name = 'sensor 2'
     $pool = 'Sensor2AppPool'
     $target = 'C:\inetpub\wwwroot\Sensor2'
-    $hostname = 'sensor2.qsys.se'
+    $hostname = 'prototyp.qsys.se'
     $dataDir = 'C:\ProgramData\Qsys\Sensor2\data'
     $sourceBinding = Get-WebBinding -Name Sensor -Protocol https | Where-Object { $_.bindingInformation -like '*:443:*' } | Select-Object -First 1
     if (!$sourceBinding) { throw 'Sensor has no HTTPS 443 binding' }
@@ -24,7 +24,7 @@ try {
     $cert = Get-Item "Cert:\LocalMachine\$store\$thumb"
     if (!$cert.HasPrivateKey -or $cert.NotAfter -lt (Get-Date)) { throw 'Sensor certificate is unusable' }
     $dnsNames = @($cert.DnsNameList | ForEach-Object { $_.Unicode })
-    if ($dnsNames -notcontains '*.qsys.se' -and $dnsNames -notcontains $hostname) { throw 'Certificate does not cover sensor2.qsys.se' }
+    if ($dnsNames -notcontains '*.qsys.se' -and $dnsNames -notcontains $hostname) { throw 'Certificate does not cover prototyp.qsys.se' }
     foreach ($required in @('web.config','Qsys.Motion.IisHost.dll','runtime\node.exe','app\server\index.js')) {
         if (!(Test-Path -LiteralPath (Join-Path $Stage $required))) { throw "Missing staged file: $required" }
     }
@@ -86,9 +86,9 @@ try {
     } finally { $manager.Dispose() }
     $hostsPath = "$env:windir\System32\drivers\etc\hosts"
     $hostsText = [IO.File]::ReadAllText($hostsPath)
-    if ($hostsText -notmatch '(?im)^\s*[^#\r\n]+\s+sensor2\.qsys\.se(?:\s|$)') {
+    if ($hostsText -notmatch '(?im)^\s*[^#\r\n]+\s+prototyp\.qsys\.se(?:\s|$)') {
         Copy-Item -LiteralPath $hostsPath -Destination "$hostsPath.sensor2-$(Get-Date -Format yyyyMMddHHmmss).bak"
-        [IO.File]::AppendAllText($hostsPath, "`r`n127.0.0.1 sensor2.qsys.se # Qsys Sensor 2`r`n")
+        [IO.File]::AppendAllText($hostsPath, "`r`n127.0.0.1 prototyp.qsys.se # Qsys Sensor 2`r`n")
     }
     Start-WebAppPool -Name $pool
     Start-Website -Name $name

@@ -27,6 +27,6 @@ $status = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
 if ($status.error) { throw $status.detail }
 $status
 for ($attempt = 0; ; $attempt++) {
-    try { Invoke-RestMethod 'https://sensor2.qsys.se/api/health' -NoProxy; break }
+    try { Invoke-RestMethod 'https://prototyp.qsys.se/api/health' -NoProxy; break }
     catch { if ($attempt -ge 20) { throw }; Start-Sleep -Seconds 1 }
 }

@@ -2,11 +2,11 @@
 
 ## Lokal IIS: sensor 2
 
-Installerad adress: `https://sensor2.qsys.se`, IIS-namn `sensor 2`, pool `Sensor2AppPool`, filer `C:\inetpub\wwwroot\Sensor2`. HTTPS använder SNI på port 443 och samma certifikat som siten `Sensor`. Lokal hosts-post pekar namnet till 127.0.0.1. För mobilåtkomst måste nätverkets DNS peka namnet till datorns LAN-adress (vid installation 10.0.23.80), och nätverket måste tillåta HTTPS till datorn.
+Installerad adress: `https://prototyp.qsys.se`, IIS-namn `sensor 2`, pool `Sensor2AppPool`, filer `C:\inetpub\wwwroot\Sensor2`. HTTPS använder SNI på port 443 och samma certifikat som siten `Sensor`. Lokal hosts-post pekar namnet till 127.0.0.1. För mobilåtkomst måste nätverkets DNS peka namnet till datorns LAN-adress (vid installation 10.0.23.80), och nätverket måste tillåta HTTPS till datorn.
 
 IIS kör .NET 10-värden under `hosting/Qsys.Motion.IisHost`. Den startar en medföljande Node-process på en dynamisk loopback-port, vidarebefordrar HTTP via YARP och startar om Node vid krasch. Windows Job Object avslutar Node när IIS-arbetaren avslutas. En enda poolprocess och avstängd överlappande återvinning skyddar JSONL-lagringen. Mätningar lagras separat i `C:\ProgramData\Qsys\Sensor2\data`.
 
-För ny installation/publicering: installera .NET 10 Hosting Bundle och IIS, kör `pnpm install --frozen-lockfile`, sedan från PowerShell `./tools/deploy-local-iis.ps1 -NodePath 'C:\sökväg\node.exe'` med Node 22 eller senare. Skriptet bygger värden, paketerar appen och ber Windows om administratörsåtkomst för IIS-installationen. Det säkerhetskopierar IIS-konfigurationen, återanvänder Sensor-certifikatet och bevarar datamappen. Certifikatet måste täcka `sensor2.qsys.se`. Kontrollera `/api/health` och testa en mätning efter publicering. Skripten installerar på denna dator; GitHub push utlöser fortfarande enbart CI och paketering.
+För ny installation/publicering: installera .NET 10 Hosting Bundle och IIS, kör `pnpm install --frozen-lockfile`, sedan från PowerShell `./tools/deploy-local-iis.ps1 -NodePath 'C:\sökväg\node.exe'` med Node 22 eller senare. Skriptet bygger värden, paketerar appen och ber Windows om administratörsåtkomst för IIS-installationen. Det säkerhetskopierar IIS-konfigurationen, återanvänder Sensor-certifikatet och bevarar datamappen. Certifikatet måste täcka `prototyp.qsys.se`. Kontrollera `/api/health` och testa en mätning efter publicering. Skripten installerar på denna dator; GitHub push utlöser fortfarande enbart CI och paketering.
 
 ## Serverpaket från GitHub
 
