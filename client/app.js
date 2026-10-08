@@ -1,7 +1,7 @@
 import { config as C } from '../shared/config.js';
 import { WalkingTracker } from './walking.js';
 import { LiveSensorSource } from './sources.js';
-import { LocalMapRenderer } from './maps.js';
+import { LocalMapRenderer, orangeMarker } from './maps.js';
 const $ = (id) => document.getElementById(id);
 let tracker = new WalkingTracker({ drawing: false }),
   calibratedLength = null,
@@ -32,7 +32,8 @@ function archiveSegment(nextPhase) {
 const map = new LocalMapRenderer($('map'));
 function render() {
   const s = tracker.state;
-  map.render(s);
+  map.render({ ...s, markers: markers.filter((m) => m.segment === segments.length) });
+  $('markDeviation').disabled = !tracker.drawing;
   $('distance').textContent = s.distance.toLocaleString('sv-SE', {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
@@ -162,8 +163,11 @@ $('finishCalibration').onclick = () => {
   render();
 };
 $('markDeviation').onclick = () => {
-  markers.push({ at: new Date().toISOString(), segment: segments.length, t: tracker.state.t ?? 0 });
-  message('Avvikelse tidsmarkerad i historiken.');
+  const marker = orangeMarker(tracker.state, markers.length, segments.length);
+  if (!tracker.drawing || !marker) return;
+  markers.push(marker);
+  render();
+  message('Markör ' + marker.id + ' fäst på orange linje och sparad i historiken.');
 };
 function historyPayload() {
   render();

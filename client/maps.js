@@ -5,6 +5,24 @@ export class IMapRenderer {
   }
   destroy() {}
 }
+export function orangeMarker(state, id, segment, at = new Date().toISOString()) {
+  const index = (state.phoneTrajectory?.length ?? 0) - 1;
+  const point = state.phoneTrajectory?.[index];
+  if (!point) return null;
+  return {
+    id,
+    type: 'orange-route',
+    segment,
+    at,
+    t: state.t ?? point.t ?? 0,
+    pointT: point.t ?? 0,
+    trajectoryIndex: index,
+    x: point.x,
+    y: point.y,
+    distance: state.distance,
+    steps: state.steps,
+  };
+}
 export function meterMarkers(trajectory, spacing) {
   const markers = [];
   let next = spacing;
@@ -270,6 +288,23 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
+    for (const marker of state.markers ?? []) {
+      const p = project(marker);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 11, 0, Math.PI * 2);
+      ctx.fillStyle = '#e8ac61';
+      ctx.fill();
+      ctx.strokeStyle = '#fff2db';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#101d29';
+      ctx.font = 'bold 12px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(marker.id), p.x, p.y);
+      ctx.restore();
+    }
     const scale = spacing * 5;
     ctx.strokeStyle = '#b3c8d0';
     ctx.beginPath();

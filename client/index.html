@@ -61,6 +61,7 @@
         ><span class="map-label">STARTENS RIKTNING ↑ · METER</span>
       </div>
       <div class="controls" style="margin-top: 12px">
+        <button id="markDeviation" disabled>Lägg markör på orange linje</button>
         <label
           >Namn på testet
           <input id="historyName" value="gangkarta-uppratt-telefon" maxlength="60" /></label
@@ -81,8 +82,7 @@
       <details>
         <summary>Felsökning</summary>
         <div class="controls">
-          <button id="exportHistory">Exportera all sensorhistorik</button
-          ><button id="markDeviation">Markera avvikelse</button>
+          <button id="exportHistory">Exportera all sensorhistorik</button>
         </div>
         <p>
           Inkluderar sensorhistorik från senaste Ny karta och aktuell kartbild. Exportera innan
