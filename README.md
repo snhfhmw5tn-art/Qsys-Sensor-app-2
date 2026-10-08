@@ -29,6 +29,8 @@ Servern lyssnar på LAN som standard. Mobilen måste kunna nå servern och lita 
 
 ## Användning
 
+För extern webbserver finns nu ett automatiskt [serverpaket och publiceringsguide](docs/Deployment.md). Installationen på en specifik server kopplas in när serveradress och driftmiljö har bestämts.
+
 1. Öppna i mobilen, tryck Starta och tillåt rörelsesensorer; GPS är valfritt. Håll telefonen stilla under minst två sekunder tills kalibrering är klar.
 2. Gå en känd sträcka och kontrollera steg, sträcka, confidence och trajectory. Kartans initiala riktning är alltid uppåt. Dra kartan, zooma med knapparna och använd ◎ för att följa positionen igen.
 3. För truck/sparkcykel: välj fordonstyp i diagnostik. Detta är en uttrycklig operatörsprior eftersom en generell IMU-regelmodell inte säkert kan identifiera undertypen. Återgå till Automatisk/gång vid avstigning. Bekräfta stillastående fordon endast när det verkligen står stilla.

@@ -1,0 +1,43 @@
+name: Package web server release
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Build and motion tests]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  package:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare server files
+        run: |
+          mkdir release
+          cp -r client server shared vendor release/
+          cp sw.js package.json pnpm-lock.yaml release/
+          cp docs/Deployment.md release/DEPLOYMENT.md
+          npm install --prefix release --omit=dev --ignore-scripts --package-lock=false
+      - name: Validate runtime package
+        run: |
+          cd release
+          node --input-type=module -e "await import('./server/state.js'); console.log('Runtime dependencies verified');"
+      - name: Create archives
+        run: |
+          tar -czf qsys-motion.tar.gz -C release .
+          cd release
+          zip -qr ../qsys-motion.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qsys-motion-server-${{ github.event.workflow_run.head_sha || github.sha }}
+          path: |
+            qsys-motion.tar.gz
+            qsys-motion.zip
+          retention-days: 14
