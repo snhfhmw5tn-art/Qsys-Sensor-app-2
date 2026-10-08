@@ -9,11 +9,12 @@ export class ISensorSource {
 const finite = (x) => typeof x === 'number' && Number.isFinite(x);
 const vector = (o) => (o && [o.x, o.y, o.z].every(finite) ? [o.x, o.y, o.z] : null);
 export class LiveSensorSource extends ISensorSource {
-  constructor(onSample, onGps, onStatus) {
+  constructor(onSample, onGps, onStatus, onOrientation = () => {}) {
     super();
     this.onSample = onSample;
     this.onGps = onGps;
     this.onStatus = onStatus;
+    this.onOrientation = onOrientation;
     this.started = 0;
     this.orientation = null;
     this.last = {};
@@ -52,6 +53,7 @@ export class LiveSensorSource extends ISensorSource {
       this.orientation = { alpha: e.alpha, beta: e.beta, gamma: e.gamma, absolute: e.absolute };
       this.last.orientation = performance.now();
       this.onStatus('orientation', 'active');
+      this.onOrientation(this.orientation, (performance.now() - this.started) / 1000);
     }
   }
   motion(e) {

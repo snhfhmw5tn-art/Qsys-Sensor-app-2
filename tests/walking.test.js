@@ -30,3 +30,20 @@ test('live source never requests geolocation', async () => {
   const code = await readFile(new URL('../client/sources.js', import.meta.url), 'utf8');
   assert.ok(!code.includes('navigator.geolocation'));
 });
+test('orientation rotates indicator immediately without waiting for motion or steps', () => {
+  const tracker = new WalkingTracker();
+  tracker.orient({ alpha: 0, beta: 90, gamma: 0 }, 0);
+  tracker.orient({ alpha: 90, beta: 90, gamma: 0 }, 0.1);
+  assert.ok(Math.abs(tracker.state.deviceHeading + 90) < 1e-8);
+  assert.equal(tracker.state.distance, 0);
+});
+test('attitude corrects small gyro error immediately but rejects compass jumps', () => {
+  const tracker = new WalkingTracker();
+  tracker.orient({ alpha: 0, beta: 90, gamma: 0 }, 0);
+  tracker.hasGyro = true;
+  tracker.heading.deviceYaw = -10;
+  tracker.orient({ alpha: 20, beta: 90, gamma: 0 }, 0.1);
+  assert.ok(Math.abs(tracker.state.deviceHeading + 20) < 1e-8);
+  tracker.orient({ alpha: 130, beta: 90, gamma: 0 }, 0.2);
+  assert.ok(Math.abs(tracker.state.deviceHeading + 20) < 1e-8);
+});

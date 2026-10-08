@@ -22,6 +22,15 @@ function render() {
 function message(text) {
   $('message').textContent = text;
 }
+let pendingFrame = false;
+function scheduleRender() {
+  if (pendingFrame) return;
+  pendingFrame = true;
+  requestAnimationFrame(() => {
+    pendingFrame = false;
+    render();
+  });
+}
 async function connectSensors() {
   if (running || starting) return;
   starting = true;
@@ -31,10 +40,7 @@ async function connectSensors() {
       sampleOrigin ??= sample.t;
       sample = { ...sample, t: sample.t - sampleOrigin };
       tracker.process(sample);
-      if (sample.t - (tracker.lastRender ?? -1) >= 0.1) {
-        render();
-        tracker.lastRender = sample.t;
-      }
+      scheduleRender();
     },
     () => {},
     (key, value) => {
@@ -44,6 +50,11 @@ async function connectSensors() {
         .join(' · ');
       if (key === 'accelerometer' && value === 'unavailable')
         message('Ingen accelerometerdata. Kontrollera sensorbehörighet och håll sidan öppen.');
+    },
+    (orientation, t) => {
+      sampleOrigin ??= t;
+      tracker.orient(orientation, t - sampleOrigin);
+      scheduleRender();
     },
   );
   try {

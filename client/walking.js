@@ -5,13 +5,15 @@ import {
   HeadingEstimator,
   SensorBuffer,
 } from './pipeline.js';
-import { radians, config as C } from '../shared/config.js';
+import { radians, wrap, config as C } from '../shared/config.js';
 export class WalkingTracker {
   constructor() {
     this.preprocessor = new SensorPreprocessor();
     this.extractor = new MotionFeatureExtractor();
     this.detector = new StepDetector();
     this.heading = new HeadingEstimator();
+    this.attitude = new HeadingEstimator();
+    this.attitudeOffset = null;
     this.window = new SensorBuffer(C.windowSeconds);
     this.history = [];
     this.raw = [];
@@ -28,6 +30,18 @@ export class WalkingTracker {
       heatmap: [],
     };
   }
+  orient(orientation, t) {
+    this.attitude.update({ orientation, gyro: null, yawRate: 0, dt: 0 }, null, 'Standing');
+    this.attitudeOffset ??= this.heading.deviceYaw;
+    const target = wrap(this.attitude.deviceYaw + this.attitudeOffset);
+    // Small, current attitude corrections remove integration lag without accepting
+    // abrupt compass jumps. Gyro prediction continues between attitude events.
+    if (!this.hasGyro || Math.abs(wrap(target - this.heading.deviceYaw)) < 25) {
+      this.heading.deviceYaw = target;
+      this.state.heading = this.state.deviceHeading = target;
+      this.history.push({ t, phoneHeading: target });
+    }
+  }
   process(raw) {
     if (this.previous !== undefined && raw.t - this.previous > C.maximumSampleGap) {
       this.window.samples = [];
@@ -36,6 +50,7 @@ export class WalkingTracker {
       this.preprocessor.previous = null;
     }
     this.previous = raw.t;
+    this.hasGyro = Array.isArray(raw.gyro);
     this.raw.push(structuredClone(raw));
     const s = this.preprocessor.process(raw);
     this.window.add(s);
