@@ -13,6 +13,7 @@ export class WalkingTracker {
     this.preprocessor = new SensorPreprocessor();
     this.detector = new GaitStepDetector();
     this.heading = new HeadingEstimator();
+    this.travel = new TravelDirection();
     this.attitude = new HeadingEstimator();
     this.attitudeOffset = null;
     this.history = [];
@@ -24,6 +25,9 @@ export class WalkingTracker {
       steps: 0,
       heading: 0,
       deviceHeading: 0,
+      phoneX: 0,
+      phoneY: 0,
+      phoneTrajectory: [{ x: 0, y: 0, t: 0, distance: 0, kind: 'start' }],
       trajectory: [{ x: 0, y: 0, t: 0, distance: 0, kind: 'start' }],
       heatmap: [],
     };
@@ -36,7 +40,7 @@ export class WalkingTracker {
     // abrupt compass jumps. Gyro prediction continues between attitude events.
     if (!this.hasGyro || Math.abs(wrap(target - this.heading.deviceYaw)) < 25) {
       this.heading.deviceYaw = target;
-      this.state.heading = this.state.deviceHeading = target;
+      this.state.deviceHeading = target;
       this.history.push({ t, phoneHeading: target });
     }
   }
@@ -50,23 +54,37 @@ export class WalkingTracker {
     this.raw.push(structuredClone(raw));
     const s = this.preprocessor.process(raw);
     this.heading.update(s, null, 'Standing');
+    const peaks = this.detector.update(s);
+    this.travel.update(this.detector.features, this.heading.deviceYaw);
     this.history.push({
       t: s.t,
       phoneHeading: this.heading.deviceYaw,
+      travelHeading: this.travel.heading,
       orientationHeading: this.heading.orientationYaw,
       yawRate: s.yawRate,
       vertical: s.vertical,
       nav: s.nav,
       bias: [...this.preprocessor.bias],
     });
-    for (const peak of this.detector.update(s)) {
-      const h = this.history.findLast((p) => p.t <= peak.t)?.phoneHeading ?? this.heading.deviceYaw;
+    for (const peak of peaks) {
+      const atStep = this.history.findLast((p) => p.t <= peak.t && p.travelHeading !== undefined);
+      const phone = atStep?.phoneHeading ?? this.heading.deviceYaw;
+      const h = atStep?.travelHeading ?? this.travel.heading;
       this.state.steps++;
       if (!this.drawing) continue;
       const length = this.stepLength;
       this.state.x += length * Math.sin(radians(h));
       this.state.y += length * Math.cos(radians(h));
+      this.state.phoneX += length * Math.sin(radians(phone));
+      this.state.phoneY += length * Math.cos(radians(phone));
       this.state.distance += length;
+      this.state.phoneTrajectory.push({
+        x: this.state.phoneX,
+        y: this.state.phoneY,
+        t: peak.t,
+        distance: this.state.distance,
+        kind: 'movement',
+      });
       this.state.trajectory.push({
         x: this.state.x,
         y: this.state.y,
@@ -75,7 +93,8 @@ export class WalkingTracker {
         kind: 'movement',
       });
     }
-    this.state.heading = this.state.deviceHeading = this.heading.deviceYaw;
+    this.state.heading = this.travel.heading;
+    this.state.deviceHeading = this.heading.deviceYaw;
     this.state.t = s.t;
     return this.state;
   }
@@ -157,5 +176,32 @@ export class GaitStepDetector {
     const result = recent.filter((p) => p.t > this.lastApplied);
     if (result.length) this.lastApplied = result.at(-1).t;
     return result;
+  }
+}
+
+// Use the navigation-frame gait axis, not phone rotation, for travel direction.
+// PCA is ambiguous by 180 degrees; retain the branch nearest prior travel.
+export class TravelDirection {
+  constructor() {
+    this.heading = 0;
+    this.origin = null;
+    this.last = null;
+  }
+  update(features, phoneHeading) {
+    const f = features;
+    if (!f || f === this.last) return this.heading;
+    this.last = f;
+    if (
+      !f.orientationReliable ||
+      f.periodicity < 0.48 ||
+      f.anisotropy < 0.4 ||
+      f.horizontalEnergy < 0.012
+    )
+      return this.heading;
+    this.origin ??= wrap(f.pcaHeading - phoneHeading);
+    let target = wrap(f.pcaHeading - this.origin);
+    if (Math.abs(wrap(target - this.heading)) > 90) target = wrap(target + 180);
+    this.heading = wrap(this.heading + 0.7 * wrap(target - this.heading));
+    return this.heading;
   }
 }

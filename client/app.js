@@ -20,7 +20,7 @@ function render() {
     maximumFractionDigits: 1,
   });
   $('steps').textContent = s.steps;
-  $('heading').textContent = Math.round(s.deviceHeading) + '°';
+  $('heading').textContent = Math.round(s.heading) + '°';
   $('calibrationSteps').textContent = calibrating ? s.steps : 0;
   $('finishCalibration').disabled = !calibrating || !s.steps;
 }

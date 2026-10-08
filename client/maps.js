@@ -119,9 +119,12 @@ export class LocalMapRenderer extends IMapRenderer {
     const viewHeading = 0;
     if (this.follow) {
       const fit = fitTrajectory(
-        [...state.trajectory, ...(state.referenceTrajectory ?? []), state].map((p) =>
-          rotateToTravel(p, viewHeading),
-        ),
+        [
+          ...state.trajectory,
+          ...(state.phoneTrajectory ?? []),
+          ...(state.referenceTrajectory ?? []),
+          state,
+        ].map((p) => rotateToTravel(p, viewHeading)),
         w,
         h,
       );
@@ -194,6 +197,15 @@ export class LocalMapRenderer extends IMapRenderer {
     });
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.strokeStyle = '#e8ac61';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    (state.phoneTrajectory ?? []).forEach((p, i) => {
+      const q = project(p);
+      if (i) ctx.lineTo(q.x, q.y);
+      else ctx.moveTo(q.x, q.y);
+    });
+    ctx.stroke();
     const trajectory = state.trajectory;
     ctx.lineWidth = 2.5;
     for (let i = 1; i < trajectory.length; i++) {
@@ -227,7 +239,8 @@ export class LocalMapRenderer extends IMapRenderer {
     const current = project(state);
     if (Number.isFinite(state.deviceHeading)) {
       ctx.save();
-      ctx.translate(current.x, current.y);
+      const phonePosition = project({ x: state.phoneX ?? state.x, y: state.phoneY ?? state.y });
+      ctx.translate(phonePosition.x, phonePosition.y);
       ctx.rotate(radians(state.deviceHeading - viewHeading));
       ctx.strokeStyle = '#e8ac61';
       ctx.lineWidth = 2;
@@ -244,7 +257,7 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.beginPath();
     ctx.arc(0, 0, 26, 0, Math.PI * 2);
     ctx.fill();
-    ctx.rotate(radians((state.deviceHeading ?? state.heading) - viewHeading));
+    ctx.rotate(radians(state.heading - viewHeading));
     ctx.fillStyle = '#56e2c9';
     ctx.strokeStyle = '#d5fff6';
     ctx.lineWidth = 1.5;

@@ -7,7 +7,7 @@ test('walking-only route counts steps locally and follows a turn', () => {
   for (const s of demoSamples()) tracker.process(s);
   assert.ok(tracker.state.steps > 30);
   assert.equal(tracker.raw.length, 2200);
-  assert.ok(Math.abs(tracker.state.x) > 5);
+  assert.ok(Math.abs(tracker.state.phoneX) > 5);
   assert.ok(tracker.state.y > 5);
   assert.ok(Math.abs(tracker.state.distance - tracker.state.steps * 0.7) < 1e-9);
 });
@@ -135,9 +135,27 @@ test('first confirmed walking steps preserve original headings', () => {
     });
   }
   assert.ok(tracker.state.steps >= 3);
-  const p = tracker.state.trajectory;
+  const p = tracker.state.phoneTrajectory;
   assert.ok(p[1].t < 1);
   const initial = Math.atan2(p[1].x, p[1].y);
   const last = Math.atan2(p.at(-1).x - p.at(-2).x, p.at(-1).y - p.at(-2).y);
   assert.ok(Math.abs(initial - last) > 0.2);
+});
+test('travel direction ignores independent phone rotation but responds to gait turns', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const travel = new TravelDirection();
+  const f = {
+    orientationReliable: true,
+    periodicity: 0.9,
+    anisotropy: 0.9,
+    horizontalEnergy: 0.1,
+    pcaHeading: 30,
+  };
+  travel.update({ ...f }, 0);
+  for (let i = 0; i < 20; i++) travel.update({ ...f }, i * 4);
+  assert.ok(Math.abs(travel.heading) < 1e-9);
+  for (let i = 0; i < 8; i++) travel.update({ ...f, pcaHeading: 90 }, 80);
+  assert.ok(Math.abs(travel.heading - 60) < 0.1);
+  travel.update({ ...f, anisotropy: 0.1, pcaHeading: 150 }, -90);
+  assert.ok(Math.abs(travel.heading - 60) < 0.1);
 });

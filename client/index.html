@@ -17,7 +17,10 @@
     </header>
     <main>
       <h1>Se hur du går.</h1>
-      <p>Håll telefonen framåt. Steg och riktning ritar ditt spår med telefonens sensorer.</p>
+      <p>
+        Håll telefonen framåt när du börjar. Grönt visar beräknad färdväg, orange visar telefonens
+        riktning.
+      </p>
       <div class="controls">
         <button id="permission" hidden>Tillåt sensorer</button>
         <button id="reset">Ny karta</button>
@@ -51,7 +54,7 @@
       <section class="stats" aria-label="Mätning">
         <div><b id="distance">0,0</b><span>meter · uppskattat</span></div>
         <div><b id="steps">0</b><span>steg</span></div>
-        <div><b id="heading">0°</b><span>telefonens riktning</span></div>
+        <div><b id="heading">0°</b><span>färdriktning</span></div>
       </section>
       <div class="map-wrap">
         <canvas id="map" aria-label="Gångspår med telefonens riktning"></canvas
@@ -59,7 +62,9 @@
       </div>
       <div class="map-options">
         <label><input id="autoZoom" type="checkbox" checked /> Autozoom – visa hela spåret</label
-        ><span><i class="green">━</i> Gångspår <i class="orange">▯</i> Telefon</span>
+        ><span
+          ><i class="green">━ ➤</i> Beräknad färdväg <i class="orange">━ ▯</i> Telefonreferens</span
+        >
       </div>
       <p class="note">
         Sträckan räknas med din kalibrerade steglängd. Kartan visar relativ rörelse.
