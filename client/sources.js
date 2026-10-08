@@ -8,13 +8,47 @@ export class ISensorSource {
 }
 const finite = (x) => typeof x === 'number' && Number.isFinite(x);
 const vector = (o) => (o && [o.x, o.y, o.z].every(finite) ? [o.x, o.y, o.z] : null);
+const normalizeHeading = (value) => ((value % 360) + 360) % 360;
+export function compassReading(e) {
+  if (finite(e.webkitCompassHeading)) {
+    if (finite(e.webkitCompassAccuracy) && e.webkitCompassAccuracy < 0) return null;
+    return {
+      heading: normalizeHeading(e.webkitCompassHeading),
+      source: 'webkit-compass',
+      accuracy: finite(e.webkitCompassAccuracy) ? e.webkitCompassAccuracy : null,
+    };
+  }
+  if (e.absolute !== true || ![e.alpha, e.beta, e.gamma].every(finite)) return null;
+  // W3C tilt-compensated heading of the outward screen normal; flat devices
+  // use the screen top edge, where the normal has no horizontal projection.
+  const a = (e.alpha * Math.PI) / 180,
+    b = (e.beta * Math.PI) / 180,
+    g = (e.gamma * Math.PI) / 180;
+  const x = -Math.cos(a) * Math.sin(g) - Math.sin(a) * Math.sin(b) * Math.cos(g);
+  const y = -Math.sin(a) * Math.sin(g) + Math.cos(a) * Math.sin(b) * Math.cos(g);
+  const heading =
+    Math.hypot(x, y) < 0.1
+      ? normalizeHeading(360 - e.alpha)
+      : normalizeHeading((Math.atan2(x, y) * 180) / Math.PI);
+  return { heading, source: 'absolute-orientation', accuracy: null };
+}
+export function compassLabel(heading) {
+  const h = normalizeHeading(heading);
+  return (
+    (Math.round(h) % 360) +
+    '° ' +
+    ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(h / 45) % 8]
+  );
+}
 export class LiveSensorSource extends ISensorSource {
-  constructor(onSample, onGps, onStatus, onOrientation = () => {}) {
+  constructor(onSample, onGps, onStatus, onOrientation = () => {}, onCompass = () => {}) {
     super();
     this.onSample = onSample;
     this.onGps = onGps;
     this.onStatus = onStatus;
     this.onOrientation = onOrientation;
+    this.onCompass = onCompass;
+    this.compass = this.compass.bind(this);
     this.started = 0;
     this.orientation = null;
     this.last = {};
@@ -39,6 +73,7 @@ export class LiveSensorSource extends ISensorSource {
     this.orientation = null;
     window.addEventListener('devicemotion', this.motion);
     window.addEventListener('deviceorientation', this.orient);
+    window.addEventListener('deviceorientationabsolute', this.compass);
     this.onStatus('accelerometer', 'waiting');
     this.onStatus('gyroscope', 'waiting');
     this.onStatus('orientation', permissions[1].value === 'granted' ? 'waiting' : 'denied');
@@ -46,9 +81,21 @@ export class LiveSensorSource extends ISensorSource {
       for (const key of ['accelerometer', 'gyroscope', 'orientation'])
         if (!this.last[key] || performance.now() - this.last[key] > 3000)
           this.onStatus(key, this.last[key] ? 'stopped' : 'unavailable');
+      if (this.last.compass && performance.now() - this.last.compass > 3000) {
+        this.last.compass = 0;
+        this.onCompass(null, (performance.now() - this.started) / 1000);
+      }
     }, 1000);
   }
+  compass(e) {
+    const reading = compassReading(e);
+    if (reading) {
+      this.last.compass = performance.now();
+      this.onCompass(reading, (performance.now() - this.started) / 1000);
+    }
+  }
   orient(e) {
+    this.compass(e);
     if ([e.alpha, e.beta, e.gamma].every(finite)) {
       this.orientation = { alpha: e.alpha, beta: e.beta, gamma: e.gamma, absolute: e.absolute };
       this.last.orientation = performance.now();
@@ -84,6 +131,7 @@ export class LiveSensorSource extends ISensorSource {
   stop() {
     window.removeEventListener('devicemotion', this.motion);
     window.removeEventListener('deviceorientation', this.orient);
+    window.removeEventListener('deviceorientationabsolute', this.compass);
     clearInterval(this.timer);
   }
 }

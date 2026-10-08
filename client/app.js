@@ -1,9 +1,11 @@
 import { config as C } from '../shared/config.js';
 import { WalkingTracker } from './walking.js';
-import { LiveSensorSource } from './sources.js';
+import { LiveSensorSource, compassLabel } from './sources.js';
 import { LocalMapRenderer, orangeMarker } from './maps.js';
 const $ = (id) => document.getElementById(id);
 let adjustmentWindowMs = 700;
+let compass = null;
+const compassEvents = [];
 let tracker = new WalkingTracker({ stepLength: 0.76, adjustmentWindowMs }),
   calibratedLength = 0.76,
   calibrating = false,
@@ -36,15 +38,13 @@ function render() {
   const analysis = tracker.travel.diagnostics(s.deviceHeading);
   // Sensor-relative angles have the opposite handedness to the front-facing SVG.
   const zeroAngle = -analysis.zeroReferenceRelativePhone;
-  const candidateAngle = -(analysis.calculatedRelativePhone ?? s.heading - s.deviceHeading);
+  const candidateAngle = compass?.heading ?? 0;
   $('zeroArrow').setAttribute('transform', 'rotate(' + zeroAngle + ' 110 110)');
   $('directionArrow').setAttribute('transform', 'rotate(' + candidateAngle + ' 110 110)');
-  $('directionArrow').setAttribute(
-    'stroke-dasharray',
-    analysis.state === 'confirmed' ? 'none' : '5 4',
-  );
+  $('directionArrow').setAttribute('stroke-dasharray', 'none');
   $('zeroAngle').textContent = Math.round(zeroAngle) + '°';
-  $('candidateAngle').textContent = Math.round(candidateAngle) + '°';
+  $('directionArrow').style.display = compass ? '' : 'none';
+  $('candidateAngle').textContent = compass ? compassLabel(compass.heading) : 'Kompassdata saknas';
   const states = {
     waiting: 'Inväntar gångdata.',
     collecting: 'Samlar gångdata för ny beräkning.',
@@ -119,6 +119,16 @@ async function connectSensors() {
       tracker.orient(orientation, t - sampleOrigin);
       scheduleRender();
     },
+    (reading, t) => {
+      compass = reading;
+      compassEvents.push({
+        at: new Date().toISOString(),
+        sourceT: t,
+        segment: segments.length,
+        ...(reading ?? { heading: null, status: 'stale' }),
+      });
+      scheduleRender();
+    },
   );
   try {
     await source.start();
@@ -180,6 +190,7 @@ $('reset').onclick = () => {
   segments.length = 0;
   statusEvents.length = 0;
   markers.length = 0;
+  compassEvents.length = 0;
   historyStartedAt = new Date().toISOString();
   phase = calibratedLength !== null ? 'walking' : 'waiting';
   $('savedFile').hidden = true;
@@ -257,6 +268,7 @@ function historyPayload() {
     statuses,
     statusEvents,
     markers,
+    compass: { current: compass, events: compassEvents },
     segments: [
       ...segments,
       {
