@@ -33,6 +33,12 @@ const transportColor = (c) =>
 export function heatValue(c, mode) {
   return mode === 'speed' ? c.averageSpeed : mode === 'visits' ? c.visitCount : c.timeSpent;
 }
+export function rotateToTravel(point, heading) {
+  const angle = radians(heading),
+    c = Math.cos(angle),
+    s = Math.sin(angle);
+  return { x: point.x * c - point.y * s, y: point.x * s + point.y * c };
+}
 export function fitTrajectory(points, width, height, padding = 48) {
   let minX = 0,
     maxX = 0,
@@ -110,9 +116,12 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#101d29';
     ctx.fillRect(0, 0, w, h);
+    const viewHeading = state.heading ?? 0;
     if (this.follow) {
       const fit = fitTrajectory(
-        [...state.trajectory, ...(state.referenceTrajectory ?? []), state],
+        [...state.trajectory, ...(state.referenceTrajectory ?? []), state].map((p) =>
+          rotateToTravel(p, viewHeading),
+        ),
         w,
         h,
       );
@@ -121,7 +130,10 @@ export class LocalMapRenderer extends IMapRenderer {
     }
     const ox = w / 2 + this.pan.x,
       oy = h / 2 + this.pan.y;
-    const project = (p) => ({ x: ox + p.x * this.zoom, y: oy - p.y * this.zoom });
+    const project = (point) => {
+      const p = rotateToTravel(point, viewHeading);
+      return { x: ox + p.x * this.zoom, y: oy - p.y * this.zoom };
+    };
     const spacing =
       this.zoom >= 18 ? 1 : this.zoom >= 5 ? 5 : 10 ** Math.ceil(Math.log10(45 / this.zoom));
     ctx.font = '10px system-ui';
@@ -216,7 +228,7 @@ export class LocalMapRenderer extends IMapRenderer {
     if (Number.isFinite(state.deviceHeading)) {
       ctx.save();
       ctx.translate(current.x, current.y);
-      ctx.rotate(radians(state.deviceHeading));
+      ctx.rotate(radians(state.deviceHeading - viewHeading));
       ctx.strokeStyle = '#e8ac61';
       ctx.lineWidth = 2;
       ctx.strokeRect(-6, -31, 12, 19);
@@ -232,7 +244,7 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.beginPath();
     ctx.arc(0, 0, 26, 0, Math.PI * 2);
     ctx.fill();
-    ctx.rotate(radians(state.deviceHeading ?? state.heading));
+    ctx.rotate(radians((state.deviceHeading ?? state.heading) - viewHeading));
     ctx.fillStyle = '#56e2c9';
     ctx.strokeStyle = '#d5fff6';
     ctx.lineWidth = 1.5;

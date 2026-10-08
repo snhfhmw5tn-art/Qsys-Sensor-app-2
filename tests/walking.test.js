@@ -66,3 +66,23 @@ test('first acceleration pulse counts immediately without gait confirmation', ()
   assert.equal(tracker.state.steps, 1);
   assert.equal(tracker.state.distance, 0.7);
 });
+
+test('travel-up rotation puts forward direction above and auto-fit includes rotated route', async () => {
+  const { rotateToTravel, fitTrajectory } = await import('../client/maps.js');
+  for (const heading of [0, 45, 90, 179, -90]) {
+    const angle = (heading * Math.PI) / 180;
+    const p = rotateToTravel({ x: 10 * Math.sin(angle), y: 10 * Math.cos(angle) }, heading);
+    assert.ok(Math.abs(p.x) < 1e-8);
+    assert.ok(Math.abs(p.y - 10) < 1e-8);
+    const points = [
+      { x: 0, y: 0 },
+      { x: 25, y: -15 },
+      { x: -12, y: 30 },
+    ].map((p) => rotateToTravel(p, heading));
+    const fit = fitTrajectory(points, 320, 500);
+    for (const p of points) {
+      assert.ok(Math.abs((p.x - fit.x) * fit.zoom) <= 112.00001);
+      assert.ok(Math.abs((p.y - fit.y) * fit.zoom) <= 202.00001);
+    }
+  }
+});
