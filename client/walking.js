@@ -46,6 +46,24 @@ export class WalkingTracker {
       this.history.push({ t, phoneHeading: target });
     }
   }
+  correctGreenRoute() {
+    const c = this.travel.correction;
+    if (!c || !this.drawing) return;
+    let x = 0,
+      y = 0;
+    for (let i = 1; i < this.state.trajectory.length; i++) {
+      const p = this.state.trajectory[i];
+      if (p.t >= c.start && p.t <= c.end)
+        p.travelHeading = wrap(c.baseHeading + wrap(p.phoneHeading - c.basePhone));
+      x += this.stepLength * Math.sin(radians(p.travelHeading));
+      y += this.stepLength * Math.cos(radians(p.travelHeading));
+      p.x = x;
+      p.y = y;
+    }
+    this.state.x = x;
+    this.state.y = y;
+    this.travel.correction = null;
+  }
   exportHistory() {
     return {
       stepLength: this.stepLength,
@@ -54,12 +72,19 @@ export class WalkingTracker {
       orientationEvents: this.orientations,
       derived: this.history,
       state: this.state,
+      greenDirection: {
+        confidence: this.travel.confidence,
+        reference: this.travel.reference,
+        turn: this.travel.turn,
+        corrections: this.travel.corrections,
+      },
     };
   }
   process(raw) {
     if (this.previous !== undefined && raw.t - this.previous > C.maximumSampleGap) {
       this.detector = new GaitStepDetector();
       this.preprocessor.previous = null;
+      this.travel.resetEvidence();
     }
     this.previous = raw.t;
     this.hasGyro = Array.isArray(raw.gyro);
@@ -67,11 +92,12 @@ export class WalkingTracker {
     const s = this.preprocessor.process(raw);
     this.heading.update(s, null, 'Standing');
     const peaks = this.detector.update(s);
-    this.travel.update(this.detector.features, this.heading.deviceYaw);
+    this.travel.update(this.detector.features, this.heading.deviceYaw, s.t);
     this.history.push({
       t: s.t,
       phoneHeading: this.heading.deviceYaw,
       travelHeading: this.travel.heading,
+      travelConfidence: this.travel.confidence,
       orientationHeading: this.heading.orientationYaw,
       yawRate: s.yawRate,
       vertical: s.vertical,
@@ -105,8 +131,12 @@ export class WalkingTracker {
         t: peak.t,
         distance: this.state.distance,
         kind: 'movement',
+        travelHeading: h,
+        phoneHeading: phone,
       });
     }
+    this.correctGreenRoute();
+    this.state.directionQuality = this.travel.confidence >= 0.6 ? 'supported' : 'uncertain';
     this.state.heading = this.travel.heading;
     this.state.deviceHeading = this.heading.deviceYaw;
     this.state.t = s.t;
@@ -193,29 +223,114 @@ export class GaitStepDetector {
   }
 }
 
-// Use the navigation-frame gait axis, not phone rotation, for travel direction.
-// PCA is ambiguous by 180 degrees; retain the branch nearest prior travel.
+const axial = (value) => wrap(value * 2) / 2;
 export class TravelDirection {
   constructor() {
     this.heading = 0;
-    this.origin = null;
     this.last = null;
+    this.time = 0;
+    this.initial = [];
+    this.reference = null;
+    this.turn = null;
+    this.phoneWindow = [];
+    this.confidence = 0;
+    this.corrections = [];
   }
-  update(features, phoneHeading) {
-    const f = features;
-    if (!f || f === this.last) return this.heading;
-    this.last = f;
-    if (
-      !f.orientationReliable ||
-      f.periodicity < 0.48 ||
-      f.anisotropy < 0.4 ||
-      f.horizontalEnergy < 0.012
-    )
+  resetEvidence() {
+    this.reference = null;
+    this.initial = [];
+    this.turn = null;
+    this.phoneWindow = [];
+    this.confidence = 0;
+  }
+  update(features, phoneHeading, t = this.time + 0.1) {
+    this.time = t;
+    this.phoneWindow.push({ t, phone: phoneHeading });
+    this.phoneWindow = this.phoneWindow.filter((p) => p.t >= t - 0.6);
+    const quiet =
+      this.phoneWindow.length > 1 &&
+      this.phoneWindow.at(-1).t - this.phoneWindow[0].t >= 0.45 &&
+      this.phoneWindow.every((p) => Math.abs(wrap(p.phone - phoneHeading)) < 8);
+    const f = features,
+      fresh = f && f !== this.last;
+    if (fresh) this.last = f;
+    const reliable =
+      f?.orientationReliable &&
+      f.periodicity >= 0.48 &&
+      f.anisotropy >= 0.4 &&
+      f.horizontalEnergy >= 0.012;
+    if (!this.reference) {
+      if (fresh && reliable) {
+        this.initial.push({ t, axis: f.pcaHeading, phone: phoneHeading });
+      }
+      if (this.initial.length >= 6 && t - this.initial[0].t >= 0.6) {
+        const x = this.initial.reduce((sum, p) => sum + Math.cos(radians(p.axis * 2)), 0),
+          y = this.initial.reduce((sum, p) => sum + Math.sin(radians(p.axis * 2)), 0);
+        this.reference = {
+          axis: (Math.atan2(y, x) * 90) / Math.PI,
+          phone: phoneHeading,
+          heading: this.heading,
+          t,
+        };
+        this.confidence = 0.6;
+      }
       return this.heading;
-    this.origin ??= wrap(f.pcaHeading - phoneHeading);
-    let target = wrap(f.pcaHeading - this.origin);
-    if (Math.abs(wrap(target - this.heading)) > 90) target = wrap(target + 180);
-    this.heading = wrap(this.heading + 0.7 * wrap(target - this.heading));
+    }
+    const ref = this.reference,
+      delta = wrap(phoneHeading - ref.phone);
+    if (!this.turn && fresh && reliable && Math.abs(delta) > 25) {
+      const axisDelta = axial(f.pcaHeading - ref.axis);
+      if (Math.abs(axisDelta) > 18 && Math.abs(axial(axisDelta - delta)) < 45) {
+        this.turn = {
+          ...ref,
+          start: ref.t,
+          lastMotion: t,
+          lastPhone: phoneHeading,
+          confirmed: false,
+        };
+      }
+    }
+    if (this.turn) {
+      const turn = this.turn,
+        rotation = wrap(phoneHeading - turn.phone);
+      if (Math.abs(wrap(phoneHeading - turn.lastPhone)) > 1) {
+        turn.lastMotion = t;
+        turn.lastPhone = phoneHeading;
+      }
+      const agreement = reliable && Math.abs(axial(f.pcaHeading - turn.axis - rotation)) < 40;
+      if (agreement) {
+        turn.confirmed = true;
+        this.confidence = 0.75;
+      }
+      if (turn.confirmed) {
+        this.heading = wrap(turn.heading + rotation);
+        this.correction = {
+          start: turn.start,
+          end: t,
+          basePhone: turn.phone,
+          baseHeading: turn.heading,
+        };
+      }
+      if ((quiet && t - turn.lastMotion > 0.4) || t - turn.start > 4) {
+        if (turn.confirmed) this.corrections.push({ ...this.correction, end: t });
+        this.reference = {
+          axis: reliable ? f.pcaHeading : turn.axis + rotation,
+          phone: phoneHeading,
+          heading: this.heading,
+          t,
+        };
+        this.turn = null;
+      }
+    } else if (quiet && fresh && reliable) {
+      // Stable phone: learn gait-axis variation without rotating the route.
+      this.reference = {
+        axis: wrap(ref.axis + 0.15 * axial(f.pcaHeading - ref.axis)),
+        phone: phoneHeading,
+        heading: this.heading,
+        t,
+      };
+      this.confidence = 0.6;
+    } else if (!reliable) this.confidence = 0.25;
     return this.heading;
   }
 }

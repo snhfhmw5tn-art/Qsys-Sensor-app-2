@@ -179,3 +179,42 @@ test('sensor export preserves raw samples and all orientation events including r
   assert.ok(exported.derived.some((p) => p.travelHeading !== undefined));
   assert.equal(exported.state.phoneTrajectory.length, 1);
 });
+test('green holds direction despite gait-axis jitter and isolated phone rotation, then accepts corroborated U-turn', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  const f = (axis) => ({
+    orientationReliable: true,
+    periodicity: 0.9,
+    anisotropy: 0.8,
+    horizontalEnergy: 0.2,
+    pcaHeading: axis,
+  });
+  for (let i = 0; i < 30; i++) p.update(f(30 + (i % 2 ? 7 : -7)), 0, i * 0.1);
+  assert.equal(p.heading, 0);
+  for (let i = 0; i < 20; i++) p.update(f(30), i * 4, 3 + i * 0.1);
+  assert.equal(p.heading, 0);
+  for (let i = 0; i < 15; i++) p.update(f(30), 76, 5 + i * 0.1);
+  assert.equal(p.heading, 0);
+  for (let i = 0; i <= 20; i++) p.update(f(30 - i * 9), 76 - i * 9, 6.5 + i * 0.1);
+  assert.ok(Math.abs(Math.abs(p.heading) - 180) < 1);
+  assert.ok(p.correction.start <= 6.6);
+});
+test('retrospective green correction never mutates orange reference', () => {
+  const tracker = new WalkingTracker({ stepLength: 1 });
+  tracker.state.trajectory = [
+    { x: 0, y: 0, t: 0 },
+    { x: 0, y: 1, t: 1, travelHeading: 0, phoneHeading: 90 },
+    { x: 0, y: 2, t: 2, travelHeading: 0, phoneHeading: 180 },
+  ];
+  tracker.state.phoneTrajectory = [
+    { x: 0, y: 0, t: 0 },
+    { x: 1, y: 0, t: 1 },
+    { x: 1, y: -1, t: 2 },
+  ];
+  const orange = JSON.stringify(tracker.state.phoneTrajectory);
+  tracker.travel.correction = { start: 1, end: 2, basePhone: 0, baseHeading: 0 };
+  tracker.correctGreenRoute();
+  assert.equal(JSON.stringify(tracker.state.phoneTrajectory), orange);
+  assert.ok(Math.abs(tracker.state.x - 1) < 1e-8);
+  assert.ok(Math.abs(tracker.state.y + 1) < 1e-8);
+});

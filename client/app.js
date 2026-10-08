@@ -38,6 +38,10 @@ function render() {
   });
   $('steps').textContent = s.steps;
   $('heading').textContent = Math.round(s.heading) + '°';
+  $('directionQuality').textContent =
+    s.directionQuality === 'supported'
+      ? 'Färdriktning: stöds av gångmönstret'
+      : 'Färdriktning: osäker – inväntar gångmönster';
   $('calibrationSteps').textContent = calibrating ? s.steps : 0;
   $('finishCalibration').disabled = !calibrating || !s.steps;
 }
