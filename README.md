@@ -17,3 +17,7 @@ Node.js 22 eller senare. Kör `npm install`, `npm run build`, `npm start` och ö
 `client/walking.js` är den aktiva gångberäkningen. `client/app.js` sköter sensorstart, presentation. `client/maps.js` ritar kartan. Gemensamma IMU-komponenter finns i `client/pipeline.js`.
 
 Äldre servermotor, transportmodeller och tester finns kvar som tidigare implementation och används inte av gångkartans mätflöde. IIS-värden kan fortsätta servera statiska filer utan ändrade bindningar. `tools/publish-client-iis.ps1` publicerar klienten och stämplar senaste commitdatumet.
+
+## Sensorhistorik
+
+Under Felsökning finns Exportera all sensorhistorik och Markera avvikelse. JSON-filen innehåller rådata, separata orienteringshändelser, beräknade riktningar och gångfunktioner, steg, kalibrering, båda spåren, sensorstatus, commitversion och aktuell kartbild. Även tidigare kartor och kalibrering från samma sidbesök ingår. Exportera innan omladdning; historiken ligger i minnet. Ingen automatisk uppladdning sker.

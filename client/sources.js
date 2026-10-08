@@ -71,6 +71,7 @@ export class LiveSensorSource extends ISensorSource {
     this.onSample({
       t: (performance.now() - this.started) / 1000,
       gravityAcceleration: total,
+      intervalMs: finite(e.interval) ? e.interval : null,
       linearAcceleration: vector(e.acceleration),
       gyro,
       orientation: fresh ? this.orientation : null,

@@ -18,6 +18,7 @@ export class WalkingTracker {
     this.attitudeOffset = null;
     this.history = [];
     this.raw = [];
+    this.orientations = [];
     this.state = {
       x: 0,
       y: 0,
@@ -33,6 +34,7 @@ export class WalkingTracker {
     };
   }
   orient(orientation, t) {
+    this.orientations.push({ t, ...structuredClone(orientation) });
     this.attitude.update({ orientation, gyro: null, yawRate: 0, dt: 0 }, null, 'Standing');
     this.attitudeOffset ??= this.heading.deviceYaw;
     const target = wrap(this.attitude.deviceYaw + this.attitudeOffset);
@@ -43,6 +45,16 @@ export class WalkingTracker {
       this.state.deviceHeading = target;
       this.history.push({ t, phoneHeading: target });
     }
+  }
+  exportHistory() {
+    return {
+      stepLength: this.stepLength,
+      drawing: this.drawing,
+      samples: this.raw,
+      orientationEvents: this.orientations,
+      derived: this.history,
+      state: this.state,
+    };
   }
   process(raw) {
     if (this.previous !== undefined && raw.t - this.previous > C.maximumSampleGap) {
@@ -65,6 +77,8 @@ export class WalkingTracker {
       vertical: s.vertical,
       nav: s.nav,
       bias: [...this.preprocessor.bias],
+      features: this.detector.features,
+      confirmedSteps: peaks.map((p) => p.t),
     });
     for (const peak of peaks) {
       const atStep = this.history.findLast((p) => p.t <= peak.t && p.travelHeading !== undefined);

@@ -1,3 +1,4 @@
+import { config as C } from '../shared/config.js';
 import { WalkingTracker } from './walking.js';
 import { LiveSensorSource } from './sources.js';
 import { LocalMapRenderer } from './maps.js';
@@ -11,6 +12,22 @@ let tracker = new WalkingTracker({ drawing: false }),
   starting = false,
   sampleOrigin = null;
 const statuses = {};
+const segments = [],
+  statusEvents = [],
+  markers = [];
+let build = null,
+  phase = 'waiting';
+const openedAt = new Date().toISOString();
+function archiveSegment(nextPhase) {
+  segments.push({
+    phase,
+    sourceTimeOrigin: sampleOrigin,
+    calibrationMeters,
+    history: tracker.exportHistory(),
+  });
+  phase = nextPhase;
+}
+
 const map = new LocalMapRenderer($('map'));
 function render() {
   const s = tracker.state;
@@ -43,12 +60,14 @@ async function connectSensors() {
   source = new LiveSensorSource(
     (sample) => {
       sampleOrigin ??= sample.t;
-      sample = { ...sample, t: sample.t - sampleOrigin };
+      sample = { ...sample, sourceT: sample.t, t: sample.t - sampleOrigin };
       tracker.process(sample);
       scheduleRender();
     },
     () => {},
     (key, value) => {
+      if (statuses[key] !== value)
+        statusEvents.push({ at: new Date().toISOString(), sensor: key, status: value });
       statuses[key] = value;
       $('sensors').textContent = Object.entries(statuses)
         .map(([k, v]) => k + ': ' + v)
@@ -81,6 +100,7 @@ async function connectSensors() {
 }
 $('permission').onclick = connectSensors;
 $('reset').onclick = () => {
+  archiveSegment(calibratedLength !== null ? 'walking' : 'waiting');
   tracker = new WalkingTracker({
     stepLength: calibratedLength ?? 0.7,
     drawing: calibratedLength !== null,
@@ -105,6 +125,7 @@ $('beginCalibration').onclick = () => {
     return;
   }
   if (!running) connectSensors();
+  archiveSegment('calibration');
   calibrationMeters = meters;
   calibrating = true;
   tracker = new WalkingTracker({ drawing: false });
@@ -117,6 +138,7 @@ $('beginCalibration').onclick = () => {
 $('finishCalibration').onclick = () => {
   if (!calibrating || !tracker.state.steps) return;
   calibratedLength = calibrationMeters / tracker.state.steps;
+  archiveSegment('walking');
   $('stride').textContent =
     calibratedLength.toLocaleString('sv-SE', { maximumFractionDigits: 3 }) + ' m/steg';
   calibrating = false;
@@ -127,6 +149,50 @@ $('finishCalibration').onclick = () => {
   message('Kalibrering klar. Kartan ritas nu med din steglängd.');
   render();
 };
+$('markDeviation').onclick = () => {
+  markers.push({ at: new Date().toISOString(), segment: segments.length, t: tracker.state.t ?? 0 });
+  message('Avvikelse tidsmarkerad i historiken.');
+};
+$('exportHistory').onclick = () => {
+  render();
+  const data = {
+    format: 'qsys-sensor-history',
+    version: 1,
+    openedAt,
+    exportedAt: new Date().toISOString(),
+    build,
+    configuration: C,
+    calibratedStepLength: calibratedLength,
+    environment: { userAgent: navigator.userAgent, secureContext: globalThis.isSecureContext },
+    statuses,
+    statusEvents,
+    markers,
+    segments: [
+      ...segments,
+      {
+        phase,
+        sourceTimeOrigin: sampleOrigin,
+        calibrationMeters,
+        history: tracker.exportHistory(),
+      },
+    ],
+    units: {
+      time: 'seconds; segment origin in sourceTimeOrigin',
+      acceleration: 'm/s²',
+      gyro: 'degrees/second',
+      orientation: 'degrees',
+      distance: 'metres',
+    },
+    mapImage: $('map').toDataURL('image/png'),
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'qsys-sensorhistorik.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  message('Historiken är exporterad. Bifoga JSON-filen här för felsökning.');
+};
 $('autoZoom').onchange = () => {
   map.follow = $('autoZoom').checked;
   render();
@@ -134,6 +200,7 @@ $('autoZoom').onchange = () => {
 fetch('/client/version.json', { cache: 'no-store' })
   .then((r) => r.json())
   .then((v) => {
+    build = v;
     $('buildVersion').textContent =
       'Senaste commit: ' +
       new Date(v.committedAt).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' }) +

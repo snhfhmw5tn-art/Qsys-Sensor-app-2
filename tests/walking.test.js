@@ -159,3 +159,23 @@ test('travel direction ignores independent phone rotation but responds to gait t
   travel.update({ ...f, anisotropy: 0.1, pcaHeading: 150 }, -90);
   assert.ok(Math.abs(travel.heading - 60) < 0.1);
 });
+test('sensor export preserves raw samples and all orientation events including rejected turns', () => {
+  const tracker = new WalkingTracker();
+  tracker.orient({ alpha: 0, beta: 90, gamma: 0 }, 0);
+  tracker.hasGyro = true;
+  tracker.orient({ alpha: 130, beta: 90, gamma: 0 }, 0.1);
+  const raw = {
+    t: 0.2,
+    gravityAcceleration: [0, 0, 9.80665],
+    linearAcceleration: [0, 0, 0],
+    gyro: [0, 0, 0],
+    orientation: { alpha: 0, beta: 0, gamma: 0 },
+  };
+  tracker.process(raw);
+  raw.gyro[0] = 999;
+  const exported = JSON.parse(JSON.stringify(tracker.exportHistory()));
+  assert.equal(exported.orientationEvents.length, 2);
+  assert.equal(exported.samples[0].gyro[0], 0);
+  assert.ok(exported.derived.some((p) => p.travelHeading !== undefined));
+  assert.equal(exported.state.phoneTrajectory.length, 1);
+});
