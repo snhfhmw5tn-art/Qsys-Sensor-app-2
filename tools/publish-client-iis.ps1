@@ -1,6 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$SourceRoot, [Parameter(Mandatory=$true)][string]$ResultPath)
 $ErrorActionPreference='Stop'
 try {
+    & "$PSScriptRoot\write-version.ps1" -SourceRoot $SourceRoot
     Add-Type -Path "$env:windir\System32\inetsrv\Microsoft.Web.Administration.dll"
     $manager=New-Object Microsoft.Web.Administration.ServerManager
     try {

@@ -1,6 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$NodePath)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
+& "$PSScriptRoot\write-version.ps1" -SourceRoot $repo
 $stage = Join-Path $repo "data\iis-stage-$(Get-Date -Format yyyyMMddHHmmss)"
 dotnet publish "$repo\hosting\Qsys.Motion.IisHost\Qsys.Motion.IisHost.csproj" -c Release -o $stage
 if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }

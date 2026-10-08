@@ -12,6 +12,20 @@ import { LocalMapRenderer, GoogleMapsRenderer } from './maps.js';
 import { benchmark } from './benchmark.js';
 const $ = (id) => document.getElementById(id),
   set = (id, value) => ($(id).textContent = value);
+fetch('/client/version.json', { cache: 'no-store' })
+  .then((r) => {
+    if (!r.ok) throw new Error('Version saknas');
+    return r.json();
+  })
+  .then((v) => {
+    const date = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Europe/Stockholm',
+      dateStyle: 'short',
+      timeStyle: 'medium',
+    }).format(new Date(v.committedAt));
+    set('buildVersion', `Senaste commit: ${date} (Stockholm) · ${v.commit.slice(0, 7)}`);
+  })
+  .catch(() => set('buildVersion', 'Version: commitinformation saknas'));
 const labels = {
   Unknown: 'OSÄKER',
   Standing: 'STÅR',

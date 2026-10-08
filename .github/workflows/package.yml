@@ -18,6 +18,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Stamp published commit version
+        shell: pwsh
+        run: ./tools/write-version.ps1
       - name: Prepare server files
         run: |
           mkdir release

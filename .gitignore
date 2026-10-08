@@ -4,3 +4,4 @@ data/
 **/obj/
 *.pfx
 .env
+client/version.json

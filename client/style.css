@@ -917,3 +917,10 @@ th {
     font-size: 10px;
   }
 }
+.build-version {
+  padding: 8px 20px;
+  background: #101d29;
+  color: #d5e5ec;
+  font: 12px system-ui;
+  text-align: center;
+}
