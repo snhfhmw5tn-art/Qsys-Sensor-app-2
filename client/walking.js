@@ -7,13 +7,13 @@ import {
 } from './pipeline.js';
 import { radians, wrap, config as C } from '../shared/config.js';
 export class WalkingTracker {
-  constructor({ stepLength = 0.7, drawing = true } = {}) {
+  constructor({ stepLength = 0.7, drawing = true, adjustmentWindowMs = 700 } = {}) {
     this.stepLength = stepLength;
     this.drawing = drawing;
     this.preprocessor = new SensorPreprocessor();
     this.detector = new GaitStepDetector();
     this.heading = new HeadingEstimator();
-    this.travel = new TravelDirection();
+    this.travel = new TravelDirection(adjustmentWindowMs);
     this.attitude = new HeadingEstimator();
     this.attitudeOffset = null;
     this.history = [];
@@ -81,7 +81,7 @@ export class WalkingTracker {
       greenDirection: {
         confidence: this.travel.confidence,
         model: 'phone-heading-with-gait-mounting-offset',
-        adjustmentWindowMs: 700,
+        adjustmentWindowMs: this.travel.adjustmentWindowMs,
         mountingOffset: this.travel.offset,
         reference: this.travel.reference,
         turn: this.travel.turn,
@@ -249,7 +249,8 @@ export function interpolateHeading(points, t) {
 }
 // Phone heading drives the provisional route. Gait estimates only mounting changes.
 export class TravelDirection {
-  constructor() {
+  constructor(adjustmentWindowMs = 700) {
+    this.setAdjustmentWindow(adjustmentWindowMs);
     this.heading = 0;
     this.offset = 0;
     this.time = 0;
@@ -260,6 +261,13 @@ export class TravelDirection {
     this.evidence = [];
     this.phoneWindow = [];
     this.trace = [];
+  }
+  setAdjustmentWindow(ms) {
+    if (!Number.isFinite(ms) || ms < 400 || ms > 5000)
+      throw new RangeError('Analysis window must be between 400 and 5000 ms');
+    this.adjustmentWindowMs = ms;
+    this.evidence = [];
+    this.last = null;
   }
   resetEvidence() {
     this.reference = null;
@@ -299,15 +307,17 @@ export class TravelDirection {
       f.anisotropy >= 0.4 &&
       f.horizontalEnergy >= 0.012;
     if (!reliable) {
-      this.evidence = this.evidence.filter((p) => p.t >= t - 0.7);
+      this.evidence = this.evidence.filter((p) => p.t >= t - this.adjustmentWindowMs / 1000);
       this.confidence = 0.2;
       return this.heading;
     }
     this.evidence.push({ t, axis: f.pcaHeading });
-    this.evidence = this.evidence.filter((p) => p.t >= t - 0.7);
+    this.evidence = this.evidence.filter((p) => p.t >= t - this.adjustmentWindowMs / 1000);
     const mean = axisMean(this.evidence);
     const stable =
-      this.evidence.length >= 4 && t - this.evidence[0].t >= 0.5 && mean.agreement > 0.94;
+      this.evidence.length >= 4 &&
+      t - this.evidence[0].t >= (this.adjustmentWindowMs - 200) / 1000 &&
+      mean.agreement > 0.94;
     if (!quiet || !stable) {
       this.confidence = 0.2;
       return this.heading;

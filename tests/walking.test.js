@@ -305,3 +305,20 @@ test('mounting correction uses a 700ms window and tolerates small gait-axis chan
   assert.ok(Math.abs(p.offset + 78) < 1e-8);
   assert.ok(p.evidence.every((point) => point.t >= t - 0.8));
 });
+
+test('analysis window defaults to 700ms, is configurable, and is exported', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  assert.equal(new TravelDirection().adjustmentWindowMs, 700);
+  const p = new TravelDirection(2000);
+  let t = 0;
+  for (let i = 0; i < 12; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
+  assert.equal(p.reference, null);
+  for (let i = 0; i < 12; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
+  assert.ok(p.reference);
+  p.setAdjustmentWindow(700);
+  assert.equal(p.evidence.length, 0);
+  assert.throws(() => p.setAdjustmentWindow(0), RangeError);
+  assert.throws(() => p.setAdjustmentWindow(NaN), RangeError);
+  const tracker = new WalkingTracker({ adjustmentWindowMs: 1200 });
+  assert.equal(tracker.exportHistory().greenDirection.adjustmentWindowMs, 1200);
+});

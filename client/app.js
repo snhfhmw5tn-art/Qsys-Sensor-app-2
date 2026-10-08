@@ -3,7 +3,8 @@ import { WalkingTracker } from './walking.js';
 import { LiveSensorSource } from './sources.js';
 import { LocalMapRenderer, orangeMarker } from './maps.js';
 const $ = (id) => document.getElementById(id);
-let tracker = new WalkingTracker({ drawing: false }),
+let adjustmentWindowMs = 700;
+let tracker = new WalkingTracker({ drawing: false, adjustmentWindowMs }),
   calibratedLength = null,
   calibrating = false,
   calibrationMeters = 0,
@@ -105,6 +106,25 @@ async function connectSensors() {
   }
 }
 $('permission').onclick = connectSensors;
+$('adjustmentWindow').onchange = () => {
+  const input = $('adjustmentWindow');
+  const value = Number(input.value);
+  if (!Number.isFinite(value) || value < 400 || value > 5000) {
+    input.value = adjustmentWindowMs;
+    message('Ange ett analysfönster mellan 400 och 5000 ms.');
+    return;
+  }
+  adjustmentWindowMs = value;
+  tracker.travel.setAdjustmentWindow(value);
+  statusEvents.push({
+    at: new Date().toISOString(),
+    type: 'analysis-window',
+    adjustmentWindowMs: value,
+    segment: segments.length,
+    t: tracker.state.t ?? 0,
+  });
+  message('Analysfönster: ' + value + ' ms.');
+};
 $('reset').onclick = () => {
   segments.length = 0;
   statusEvents.length = 0;
@@ -116,6 +136,7 @@ $('reset').onclick = () => {
   $('savedFile').textContent = '';
   tracker = new WalkingTracker({
     stepLength: calibratedLength ?? 0.7,
+    adjustmentWindowMs,
     drawing: calibratedLength !== null,
   });
   calibrating = false;
@@ -141,7 +162,7 @@ $('beginCalibration').onclick = () => {
   archiveSegment('calibration');
   calibrationMeters = meters;
   calibrating = true;
-  tracker = new WalkingTracker({ drawing: false });
+  tracker = new WalkingTracker({ drawing: false, adjustmentWindowMs });
   sampleOrigin = null;
   $('beginCalibration').disabled = true;
   $('calibrationMeters').disabled = true;
@@ -155,7 +176,7 @@ $('finishCalibration').onclick = () => {
   $('stride').textContent =
     calibratedLength.toLocaleString('sv-SE', { maximumFractionDigits: 3 }) + ' m/steg';
   calibrating = false;
-  tracker = new WalkingTracker({ stepLength: calibratedLength });
+  tracker = new WalkingTracker({ stepLength: calibratedLength, adjustmentWindowMs });
   sampleOrigin = null;
   $('beginCalibration').disabled = false;
   $('calibrationMeters').disabled = false;
@@ -180,6 +201,7 @@ function historyPayload() {
     build,
     configuration: C,
     calibratedStepLength: calibratedLength,
+    adjustmentWindowMs,
     environment: { userAgent: navigator.userAgent, secureContext: globalThis.isSecureContext },
     statuses,
     statusEvents,

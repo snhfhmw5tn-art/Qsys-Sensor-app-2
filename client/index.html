@@ -39,7 +39,7 @@
             type="number"
             min="0.1"
             step="any"
-            value="10"
+            value="19"
             inputmode="decimal"
         /></label>
         <div class="controls">
@@ -69,6 +69,18 @@
       </div>
       <p><a id="savedFile" hidden download></a></p>
       <div class="map-options">
+        <label
+          >Analysfönster (ms)
+          <input
+            id="adjustmentWindow"
+            type="number"
+            min="400"
+            max="5000"
+            step="1"
+            value="700"
+            inputmode="numeric"
+          />
+        </label>
         <label><input id="autoZoom" type="checkbox" checked /> Autozoom – visa hela spåret</label
         ><span
           ><i class="green">━ ➤</i> Beräknad färdväg <i class="orange">━ ▯</i> Telefonreferens</span
