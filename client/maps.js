@@ -217,7 +217,7 @@ export class LocalMapRenderer extends IMapRenderer {
     });
     ctx.stroke();
     ctx.restore();
-    ctx.strokeStyle = '#ff9400';
+    ctx.strokeStyle = '#e8ac61';
     ctx.lineWidth = 2;
     ctx.beginPath();
     (state.phoneTrajectory ?? []).forEach((p, i) => {
@@ -230,7 +230,7 @@ export class LocalMapRenderer extends IMapRenderer {
     for (const marker of meterMarkers(trajectory, this.zoom >= 12 ? 5 : 20)) {
       const p = project(marker);
       ctx.beginPath();
-      ctx.fillStyle = '#ff9400';
+      ctx.fillStyle = '#e8ac61';
       ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#fff2db';
@@ -249,13 +249,30 @@ export class LocalMapRenderer extends IMapRenderer {
       const phonePosition = project({ x: state.phoneX ?? state.x, y: state.phoneY ?? state.y });
       ctx.translate(phonePosition.x, phonePosition.y);
       ctx.rotate(radians(state.deviceHeading - viewHeading));
-      ctx.strokeStyle = '#ff9400';
+      ctx.strokeStyle = '#e8ac61';
       ctx.lineWidth = 2;
       ctx.strokeRect(-6, -31, 12, 19);
       ctx.beginPath();
       ctx.moveTo(0, -35);
       ctx.lineTo(0, -43);
       ctx.stroke();
+      ctx.restore();
+    }
+    for (const marker of state.markers ?? []) {
+      const p = project(marker);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 11, 0, Math.PI * 2);
+      ctx.fillStyle = '#e8ac61';
+      ctx.fill();
+      ctx.strokeStyle = '#fff2db';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#101d29';
+      ctx.font = 'bold 12px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(marker.id), p.x, p.y);
       ctx.restore();
     }
     const calculatedEnd = state.calculatedTrajectory?.at(-1);
@@ -275,23 +292,6 @@ export class LocalMapRenderer extends IMapRenderer {
       ctx.strokeStyle = '#101d29';
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.restore();
-    }
-    for (const marker of state.markers ?? []) {
-      const p = project(marker);
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 11, 0, Math.PI * 2);
-      ctx.fillStyle = '#ff9400';
-      ctx.fill();
-      ctx.strokeStyle = '#fff2db';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.fillStyle = '#101d29';
-      ctx.font = 'bold 12px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(marker.id), p.x, p.y);
       ctx.restore();
     }
     const scale = spacing * 5;
