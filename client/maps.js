@@ -217,7 +217,7 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.beginPath();
     ctx.arc(0, 0, 26, 0, Math.PI * 2);
     ctx.fill();
-    ctx.rotate(radians(state.heading));
+    ctx.rotate(radians(state.deviceHeading ?? state.heading));
     ctx.fillStyle = '#56e2c9';
     ctx.strokeStyle = '#d5fff6';
     ctx.lineWidth = 1.5;
@@ -328,7 +328,7 @@ export class GoogleMapsRenderer extends IMapRenderer {
         icon: {
           path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
           scale: 6,
-          rotation: s.geographicHeading + s.heading,
+          rotation: s.geographicHeading + (s.deviceHeading ?? s.heading),
           fillColor: '#14b89b',
           fillOpacity: 1,
           strokeColor: '#ffffff',
