@@ -31,3 +31,5 @@ Svängdetekteringen fryser referensen vid påbörjad rotation och stöder även 
 Efter praktiskt test har den gröna TravelDirection återställts till ae22a4e. Senare nollställning av sensorhistorik och exportfunktioner är kvar. Orange referens är oförändrad.
 
 Efter en bekräftad sväng kan stabil gång korrigera kvarstående grön vinkelskillnad. Referensen lärs under stabil gång före första svängen. Efter svängen krävs minst åtta starka gångfönster över en sekund med liten axelspridning. Korrigeringen begränsas till fem grader per sekund, avvisar skillnader över 45 grader och ändrar inte orange referens eller tidigare steg.
+
+Den gröna gångriktningen beräknas från accelerometerns gångaxel i navigationsplanet. Telefonens gyrobaserade vridning stöder svängidentifiering och valet mellan axelns två riktningar, men bestämmer inte svängens storlek. Vid greppbyte med ändrad lutning hålls riktningen tills gångfönstret har stabiliserats. En separat ursprungsreferens bevaras mellan svängar. Orange telefonspår och stegräkning påverkas inte. Sensorbaserad gångaxel är en uppskattning och behöver kontrolleras genom verkliga gångtester.

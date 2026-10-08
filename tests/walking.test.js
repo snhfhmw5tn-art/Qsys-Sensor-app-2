@@ -151,13 +151,15 @@ test('travel direction ignores independent phone rotation but responds to gait t
     horizontalEnergy: 0.1,
     pcaHeading: 30,
   };
-  travel.update({ ...f }, 0);
+  for (let i = 0; i < 30; i++) travel.update({ ...f }, 0);
   for (let i = 0; i < 20; i++) travel.update({ ...f }, i * 4);
   assert.ok(Math.abs(travel.heading) < 1e-9);
-  for (let i = 0; i < 8; i++) travel.update({ ...f, pcaHeading: 90 }, 80);
-  assert.ok(Math.abs(travel.heading - 60) < 0.1);
+  for (let i = 0; i < 25; i++) travel.update({ ...f }, 80);
+  for (let i = 1; i <= 20; i++) travel.update({ ...f, pcaHeading: 30 + i * 3 }, 80 + i * 3);
+  for (let i = 0; i < 30; i++) travel.update({ ...f, pcaHeading: 90 }, 140);
+  assert.ok(Math.abs(travel.heading - 60) < 3);
   travel.update({ ...f, anisotropy: 0.1, pcaHeading: 150 }, -90);
-  assert.ok(Math.abs(travel.heading - 60) < 0.1);
+  assert.ok(Math.abs(travel.heading - 60) < 3);
 });
 test('sensor export preserves raw samples and all orientation events including rejected turns', () => {
   const tracker = new WalkingTracker();
@@ -196,7 +198,8 @@ test('green holds direction despite gait-axis jitter and isolated phone rotation
   for (let i = 0; i < 15; i++) p.update(f(30), 76, 5 + i * 0.1);
   assert.equal(p.heading, 0);
   for (let i = 0; i <= 20; i++) p.update(f(30 - i * 9), 76 - i * 9, 6.5 + i * 0.1);
-  assert.ok(Math.abs(Math.abs(p.heading) - 180) < 1);
+  for (let i = 0; i < 30; i++) p.update(f(-150), -104, 8.6 + i * 0.1);
+  assert.ok(Math.abs(Math.abs(p.heading) - 180) < 3);
   assert.ok(p.correction.start <= 6.6);
 });
 test('retrospective green correction never mutates orange reference', () => {
@@ -256,4 +259,43 @@ test('inconsistent gait cannot apply post-turn recovery', async () => {
   p.corrections.push({ start: 2, end: 3 });
   for (let i = 0; i < 100; i++) p.update(f(i % 2 ? 40 : -40), 180, 3 + i * 0.1);
   assert.equal(p.heading, 153);
+});
+
+test('grip tilt freezes green while navigation-frame gait stays straight', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  const f = (axis) => ({
+    orientationReliable: true,
+    periodicity: 0.9,
+    anisotropy: 0.9,
+    horizontalEnergy: 0.2,
+    pcaHeading: axis,
+  });
+  for (let i = 0; i < 30; i++) p.update(f(20), 0, i * 0.1, { orientation: { beta: 90, gamma: 0 } });
+  for (let i = 0; i < 10; i++)
+    p.update(f(70), i * 9, 3 + i * 0.1, { orientation: { beta: 90 - i * 10, gamma: i * 10 } });
+  for (let i = 0; i < 30; i++)
+    p.update(f(20), 90, 4 + i * 0.1, { orientation: { beta: 0, gamma: 90 } });
+  assert.equal(p.heading, 0);
+  assert.equal(p.corrections.length, 0);
+});
+
+test('successive right-angle turns retain the original gait coordinate reference', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  const f = (axis) => ({
+    orientationReliable: true,
+    periodicity: 0.9,
+    anisotropy: 0.9,
+    horizontalEnergy: 0.2,
+    pcaHeading: axis,
+  });
+  let t = 0;
+  for (let i = 0; i < 30; i++, t += 0.1) p.update(f(20), 0, t);
+  for (let turn = 0; turn < 2; turn++) {
+    for (let i = 1; i <= 20; i++, t += 0.1)
+      p.update(f(20 + turn * 90 + i * 4.5), turn * 90 + i * 4.5, t);
+    for (let i = 0; i < 40; i++, t += 0.1) p.update(f(20 + (turn + 1) * 90), (turn + 1) * 90, t);
+    assert.ok(Math.abs(Math.abs(p.heading) - (turn + 1) * 90) < 3);
+  }
 });
