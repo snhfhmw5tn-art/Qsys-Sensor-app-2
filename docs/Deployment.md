@@ -2,6 +2,8 @@
 
 ## Lokal IIS: sensor 2
 
+Fast HTTP-bindning enligt användarens IIS-inställning: **HTTP**, **Alla ej tilldelade** (`*`), **port 80**, **värdnamn prototyp.qsys.se**. Bindningen `*:80:prototyp.qsys.se` ska bevaras vid framtida publicering. HTTPS-bindningen `*:443:prototyp.qsys.se` behålls parallellt eftersom sensormätning kräver en säker webbläsarkontext. Använd HTTPS-adressen när sensorerna ska användas.
+
 Installerad adress: `https://prototyp.qsys.se`, IIS-namn `sensor 2`, pool `Sensor2AppPool`, filer `C:\inetpub\wwwroot\Sensor2`. HTTPS använder SNI på port 443 och samma certifikat som siten `Sensor`. Lokal hosts-post pekar namnet till 127.0.0.1. För mobilåtkomst måste nätverkets DNS peka namnet till datorns LAN-adress (vid installation 10.0.23.80), och nätverket måste tillåta HTTPS till datorn.
 
 IIS kör .NET 10-värden under `hosting/Qsys.Motion.IisHost`. Den startar en medföljande Node-process på en dynamisk loopback-port, vidarebefordrar HTTP via YARP och startar om Node vid krasch. Windows Job Object avslutar Node när IIS-arbetaren avslutas. En enda poolprocess och avstängd överlappande återvinning skyddar JSONL-lagringen. Mätningar lagras separat i `C:\ProgramData\Qsys\Sensor2\data`.

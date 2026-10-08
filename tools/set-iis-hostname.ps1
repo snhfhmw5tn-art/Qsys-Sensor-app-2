@@ -16,6 +16,7 @@ try {
         if ($names -notcontains '*.qsys.se' -and $names -notcontains 'prototyp.qsys.se') { throw 'Certificate does not cover prototyp.qsys.se' }
         foreach ($other in $manager.Sites) {
             if ($other.Name -ne 'sensor 2' -and ($other.Bindings | Where-Object { $_.BindingInformation -eq '*:443:prototyp.qsys.se' })) { throw 'Hostname is already bound to another site' }
+            if ($other.Name -ne 'sensor 2' -and ($other.Bindings | Where-Object { $_.Protocol -eq 'http' -and $_.BindingInformation -eq '*:80:prototyp.qsys.se' })) { throw 'HTTP hostname is already bound to another site' }
         }
         & "$env:windir\System32\inetsrv\appcmd.exe" add backup "Sensor2-Hostname-$(Get-Date -Format yyyyMMdd-HHmmss)" | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'IIS backup failed' }
@@ -23,6 +24,9 @@ try {
         $binding.SslFlags = [Microsoft.Web.Administration.SslFlags]1
         $binding.CertificateHash = $certificate.GetCertHash()
         $binding.CertificateStoreName = $store
+        if (!($site.Bindings | Where-Object { $_.Protocol -eq 'http' -and $_.BindingInformation -eq '*:80:prototyp.qsys.se' })) {
+            $site.Bindings.Add('*:80:prototyp.qsys.se','http') | Out-Null
+        }
         $manager.CommitChanges()
     } finally { $manager.Dispose() }
     & netsh.exe http show sslcert 'hostnameport=prototyp.qsys.se:443' | Out-Null

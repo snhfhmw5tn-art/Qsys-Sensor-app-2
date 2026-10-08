@@ -71,6 +71,13 @@ try {
     Add-Type -Path "$env:windir\System32\inetsrv\Microsoft.Web.Administration.dll"
     $manager = New-Object Microsoft.Web.Administration.ServerManager
     try {
+        $httpInfo = "*:80:$hostname"
+        foreach ($other in $manager.Sites) {
+            if ($other.Name -ne $name -and ($other.Bindings | Where-Object { $_.Protocol -eq 'http' -and $_.BindingInformation -eq $httpInfo })) { throw 'HTTP hostname is already bound to another site' }
+        }
+        if (!($manager.Sites[$name].Bindings | Where-Object { $_.Protocol -eq 'http' -and $_.BindingInformation -eq $httpInfo })) {
+            $manager.Sites[$name].Bindings.Add($httpInfo, 'http') | Out-Null
+        }
         $https = $manager.Sites[$name].Bindings | Where-Object { $_.Protocol -eq 'https' } | Select-Object -First 1
         $https.BindingInformation = "*:443:$hostname"
         $https.SslFlags = [Microsoft.Web.Administration.SslFlags]1
