@@ -340,6 +340,7 @@ export class TravelDirection {
       f.horizontalEnergy >= 0.012;
     if (!reliable) {
       this.directionCandidate = null;
+      this.turn = null;
       this.analysisState = 'weak';
       this.candidate = null;
       this.evidence = this.evidence.filter((p) => p.t >= t - this.adjustmentWindowMs / 1000);
@@ -423,7 +424,7 @@ export class TravelDirection {
     }
     const target = wrap(this.reference.heading + estimate - this.reference.axis);
     if (Math.abs(wrap(target - this.reference.heading)) <= 2) this.directionCandidate = null;
-    if (sample && Math.abs(wrap(target - this.reference.heading)) > 2) {
+    if (sample && !this.turn && Math.abs(wrap(target - this.reference.heading)) > 2) {
       this.directionCandidate ??= { start: t, heading: target };
       this.directionCandidate.heading = target;
       const supporting = this.confirmedFootfalls.filter(
@@ -438,16 +439,50 @@ export class TravelDirection {
         this.confidence = 0.2;
         return this.heading;
       }
-      // Re-establish the local forward frame, preserving its heading in the map.
-      this.reference = { axis: estimate, heading: target, t };
+      this.turn = {
+        start: this.directionCandidate.start,
+        confirmedAt: t,
+        baseHeading: this.reference.heading,
+        lastSupportedAt: t,
+        settledSince: null,
+      };
       this.directionReferences.push({
         t,
         axis: estimate,
         heading: target,
         persistentSince: this.directionCandidate.start,
         footfalls: [...supporting],
+        reason: 'turn-start',
+        gyroYawRate: sample.yawRate ?? null,
       });
       this.directionCandidate = null;
+    }
+    if (sample && this.turn) {
+      const lastStep = this.confirmedFootfalls.at(-1);
+      if (lastStep === undefined || t - lastStep > 1.2) {
+        this.turn = null;
+        this.analysisState = 'collecting';
+        this.confidence = 0.2;
+        return this.heading;
+      }
+      this.turn.lastSupportedAt = lastStep;
+      this.turn.gyroYawRate = sample.yawRate ?? null;
+      // Once sustained gait confirms a turn, follow it continuously instead of
+      // requiring a fresh two-step confirmation for every subsequent angle.
+      if (Math.abs(slope) < 5 && residual < 8) this.turn.settledSince ??= t;
+      else this.turn.settledSince = null;
+      if (this.turn.settledSince !== null && t - this.turn.settledSince >= 0.5) {
+        this.reference = { axis: estimate, heading: target, t };
+        this.directionReferences.push({
+          t,
+          axis: estimate,
+          heading: target,
+          persistentSince: this.turn.start,
+          reason: 'turn-complete',
+          gyroYawRate: sample.yawRate ?? null,
+        });
+        this.turn = null;
+      }
     }
 
     this.lastConfirmedAt = t;
@@ -462,7 +497,7 @@ export class TravelDirection {
         zeroOffset: this.zeroOffset,
         heading: this.heading,
         phone,
-        reason: 'confirmed-gait',
+        reason: this.turn ? 'turn-following' : 'mounting-reference',
       });
     }
     this.confidence = 0.6;

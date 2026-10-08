@@ -382,3 +382,20 @@ test('a new local forward reference requires persistent direction and repeated c
     p.update(gaitFeature(56), 0, t, {}, i === 0 ? [{ t }] : []);
   assert.ok(Math.abs(p.heading - before) < 3);
 });
+
+test('sustained acceleration-axis rotation follows an ongoing turn without rearming at each angle', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  let t = 0;
+  for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t, {});
+  for (let i = 1; i <= 40; i++, t += 0.1) {
+    p.update(gaitFeature(20 + i * 2.25), 0, t, { yawRate: 0 }, i % 5 === 0 ? [{ t }] : []);
+    if (i > 15) assert.ok(Math.abs(p.heading - i * 2.25) < 4);
+  }
+  for (let i = 0; i < 20; i++, t += 0.1)
+    p.update(gaitFeature(110), 0, t, {}, i % 5 === 0 ? [{ t }] : []);
+  assert.ok(Math.abs(p.heading - 90) < 3);
+  assert.ok(p.directionReferences.some((r) => r.reason === 'turn-start'));
+  assert.ok(p.directionReferences.some((r) => r.reason === 'turn-complete'));
+  assert.equal(p.turn, null);
+});
