@@ -206,8 +206,8 @@ export class LocalMapRenderer extends IMapRenderer {
       }
     ctx.globalAlpha = 1;
     ctx.save();
-    ctx.strokeStyle = '#56e2c9';
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#32d45a';
+    ctx.lineWidth = 7;
     ctx.setLineDash(state.calculatedStatus === 'supported' ? [] : [5, 3]);
     ctx.beginPath();
     (state.calculatedTrajectory ?? []).forEach((p, i) => {
@@ -217,7 +217,7 @@ export class LocalMapRenderer extends IMapRenderer {
     });
     ctx.stroke();
     ctx.restore();
-    ctx.strokeStyle = '#e8ac61';
+    ctx.strokeStyle = '#ff9400';
     ctx.lineWidth = 2;
     ctx.beginPath();
     (state.phoneTrajectory ?? []).forEach((p, i) => {
@@ -230,7 +230,7 @@ export class LocalMapRenderer extends IMapRenderer {
     for (const marker of meterMarkers(trajectory, this.zoom >= 12 ? 5 : 20)) {
       const p = project(marker);
       ctx.beginPath();
-      ctx.fillStyle = '#e8ac61';
+      ctx.fillStyle = '#ff9400';
       ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#fff2db';
@@ -249,7 +249,7 @@ export class LocalMapRenderer extends IMapRenderer {
       const phonePosition = project({ x: state.phoneX ?? state.x, y: state.phoneY ?? state.y });
       ctx.translate(phonePosition.x, phonePosition.y);
       ctx.rotate(radians(state.deviceHeading - viewHeading));
-      ctx.strokeStyle = '#e8ac61';
+      ctx.strokeStyle = '#ff9400';
       ctx.lineWidth = 2;
       ctx.strokeRect(-6, -31, 12, 19);
       ctx.beginPath();
@@ -258,12 +258,31 @@ export class LocalMapRenderer extends IMapRenderer {
       ctx.stroke();
       ctx.restore();
     }
+    const calculatedEnd = state.calculatedTrajectory?.at(-1);
+    if (calculatedEnd && Number.isFinite(state.calculatedHeading)) {
+      const p = project(calculatedEnd);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(radians(state.calculatedHeading - viewHeading));
+      ctx.beginPath();
+      ctx.moveTo(0, -23);
+      ctx.lineTo(10, 10);
+      ctx.lineTo(0, 4);
+      ctx.lineTo(-10, 10);
+      ctx.closePath();
+      ctx.fillStyle = '#32d45a';
+      ctx.fill();
+      ctx.strokeStyle = '#101d29';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
     for (const marker of state.markers ?? []) {
       const p = project(marker);
       ctx.save();
       ctx.beginPath();
       ctx.arc(p.x, p.y, 11, 0, Math.PI * 2);
-      ctx.fillStyle = '#e8ac61';
+      ctx.fillStyle = '#ff9400';
       ctx.fill();
       ctx.strokeStyle = '#fff2db';
       ctx.lineWidth = 2;
