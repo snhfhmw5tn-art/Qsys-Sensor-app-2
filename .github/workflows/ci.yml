@@ -18,3 +18,4 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - run: dotnet test tests/Qsys.Motion.Tests/Qsys.Motion.Tests.csproj --configuration Release
+      - run: dotnet build hosting/Qsys.Motion.IisHost/Qsys.Motion.IisHost.csproj --configuration Release
