@@ -57,7 +57,9 @@ function render() {
     (states[analysis.state] ?? states.waiting);
   $('analysisProgress').value = analysis.progress;
   $('referenceTiming').textContent =
-    'Analysfönster: ' +
+    'Kontroll cirka var 100 ms · Bekräftelser: ' +
+    analysis.confirmationCount +
+    ' · Analysfönster: ' +
     analysis.windowMs +
     ' ms · Senaste beräkning: ' +
     (analysis.lastConfirmedAt === null ? 'ingen' : analysis.lastConfirmedAt.toFixed(1) + ' s') +

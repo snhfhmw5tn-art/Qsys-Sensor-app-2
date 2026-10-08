@@ -267,6 +267,7 @@ export class TravelDirection {
     this.candidate = null;
     this.lastConfirmedAt = null;
     this.referencePendingSince = null;
+    this.confirmationCount = 0;
     this.setAdjustmentWindow(adjustmentWindowMs);
   }
   diagnostics(phone = 0) {
@@ -276,6 +277,8 @@ export class TravelDirection {
       state: this.analysisState,
       pendingSince: this.referencePendingSince,
       windowMs: this.adjustmentWindowMs,
+      checkIntervalMs: 100,
+      confirmationCount: this.confirmationCount,
       progress:
         this.analysisState === 'confirmed'
           ? 1
@@ -317,7 +320,7 @@ export class TravelDirection {
       Math.abs(wrap(this.offset - this.zeroOffset)) > 10
     ) {
       this.referencePendingSince = t;
-      this.evidence = [];
+      // Keep the rolling gait evidence throughout a multi-second turn.
       this.analysisState = 'collecting';
     }
     if (!f || f === this.last) return this.heading;
@@ -356,11 +359,31 @@ export class TravelDirection {
     this.evidence = this.evidence.filter((p) => p.t >= t - this.adjustmentWindowMs / 1000);
     const mean = axisMean(this.evidence);
     const average = this.evidence.reduce((sum, p) => sum + p.unwrapped, 0) / this.evidence.length;
-    this.candidate = this.reference ? wrap(average - this.reference.axis) : null;
+    const center = this.evidence.reduce((sum, p) => sum + p.t, 0) / this.evidence.length;
+    const variance = this.evidence.reduce((sum, p) => sum + (p.t - center) ** 2, 0);
+    const slope =
+      variance > 0
+        ? this.evidence.reduce((sum, p) => sum + (p.t - center) * (p.unwrapped - average), 0) /
+          variance
+        : 0;
+    const residual = Math.sqrt(
+      this.evidence.reduce(
+        (sum, p) => sum + (p.unwrapped - average - slope * (p.t - center)) ** 2,
+        0,
+      ) / this.evidence.length,
+    );
+    // A smooth changing axis is useful evidence during a turn, even when it is
+    // not constant. Use its current fitted value rather than the window midpoint.
+    const coherentTurn = this.reference && residual < 8 && Math.abs(slope) <= 160;
+    const estimate = coherentTurn ? average + slope * (t - center) : average;
+    this.candidate = this.reference ? wrap(estimate - this.reference.axis) : null;
+    const requiredSpan = this.reference
+      ? Math.min(0.25, (this.adjustmentWindowMs - 200) / 1000)
+      : (this.adjustmentWindowMs - 200) / 1000;
     const stable =
       this.evidence.length >= 4 &&
-      t - this.evidence[0].t >= (this.adjustmentWindowMs - 200) / 1000 &&
-      mean.agreement > 0.94;
+      t - this.evidence[0].t >= requiredSpan &&
+      (mean.agreement > 0.94 || coherentTurn);
     if (!stable) {
       this.analysisState = 'collecting';
       this.confidence = 0.2;
@@ -368,6 +391,7 @@ export class TravelDirection {
     }
     this.analysisState = 'confirmed';
     this.lastConfirmedAt = t;
+    this.confirmationCount++;
     this.referencePendingSince = null;
     if (!this.reference) {
       this.reference = { axis: average, heading: 0, t };
@@ -384,7 +408,7 @@ export class TravelDirection {
       this.confidence = 0.6;
       return this.heading;
     }
-    const target = wrap(average - this.reference.axis);
+    const target = wrap(estimate - this.reference.axis);
     if (Math.abs(wrap(target - this.heading)) > 2) this.heading = target;
     this.offset = wrap(phone - this.heading);
     if (Math.abs(wrap(this.offset - this.zeroOffset)) > 2) {
@@ -399,7 +423,7 @@ export class TravelDirection {
     }
     this.confidence = 0.6;
     // Feature extraction and the confirmation window lag the actual footfalls.
-    const lag = 0.6 + this.adjustmentWindowMs / 2000;
+    const lag = coherentTurn ? 0.6 : 0.6 + this.adjustmentWindowMs / 2000;
     const point = { t: Math.max(this.reference.t, t - lag), heading: this.heading };
     const prior = this.path.at(-1);
     if (point.t > prior.t) {

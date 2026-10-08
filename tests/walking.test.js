@@ -319,7 +319,7 @@ test('reference diagnostics distinguish pending orientation change from confirme
   assert.equal(p.diagnostics().lastConfirmedAt, null);
   for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
   assert.equal(p.diagnostics(0).state, 'confirmed');
-  p.update(gaitFeature(20), 37, t);
+  p.update(p.last, 37, t);
   t += 0.1;
   const pending = p.diagnostics(37);
   assert.equal(pending.state, 'collecting');
@@ -346,4 +346,19 @@ test('reference diagnostics distinguish pending orientation change from confirme
   const exported = JSON.parse(JSON.stringify(tracker.exportHistory()));
   assert.ok(exported.derived.at(-1).directionAnalysis);
   assert.ok(Array.isArray(exported.greenDirection.referenceChanges));
+});
+
+test('a multi-second turn is checked repeatedly without restarting the evidence window', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  let t = 0;
+  for (let i = 0; i < 30; i++, t += 0.1) p.update(gaitFeature(20), 0, t);
+  const count = p.confirmationCount;
+  for (let i = 1; i <= 40; i++, t += 0.1) {
+    p.update(gaitFeature(20 + i * 2.25), i * 2.25, t);
+    if (i >= 10) assert.ok(Math.abs(p.heading - i * 2.25) < 4);
+  }
+  assert.ok(p.confirmationCount - count >= 30);
+  assert.ok(p.evidence.length >= 6);
+  assert.equal(p.diagnostics().checkIntervalMs, 100);
 });
