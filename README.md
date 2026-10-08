@@ -4,7 +4,7 @@ Mobilanpassad rörelsekarta som ritar gång med telefonens accelerometer, gyrosk
 
 ## Användning
 
-Öppna appen via HTTPS på telefonen. Tryck **Starta mätning**, tillåt rörelsesensorerna och gå med telefonen riktad framåt. **Stoppa** behåller mätningen för export. **Ny karta** rensar den. Varje ny start börjar en ny mätning.
+Öppna appen via HTTPS på telefonen. Loggningen börjar automatiskt. På telefoner som kräver ett tryck för sensorbehörighet visas **Tillåt sensorer**. Gå med telefonen riktad framåt. **Ny karta** rensar mätningen och sätter en ny startpunkt medan sensorerna fortsätter logga. Sensorhistorik och kartbild kan exporteras under pågående mätning.
 
 Steg bekräftas med återkommande accelerationsmönster; de första stegen ritas när gångmönstret är bekräftat. Sträckan uppskattas med 0,70 meter per steg. Telefonens relativa rotation ger spårets riktning. Separata telefonvridningar kan därför tolkas som svängar. Detta är en sensorprototyp, inte uppmätt markposition.
 

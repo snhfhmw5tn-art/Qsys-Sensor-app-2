@@ -7,7 +7,8 @@ let tracker = new WalkingTracker(),
   running = false,
   starting = false,
   build = null,
-  markers = [];
+  markers = [],
+  sampleOrigin = null;
 const statuses = {};
 const map = new LocalMapRenderer($('map'));
 function render() {
@@ -23,26 +24,14 @@ function render() {
 function message(text) {
   $('message').textContent = text;
 }
-function stop() {
-  source?.stop();
-  source = null;
-  running = false;
-  $('start').disabled = false;
-  $('stop').disabled = true;
-  $('reset').disabled = false;
-  $('status').textContent = 'Stoppad';
-  message('Mätningen är stoppad. Du kan spara sensorhistorik och kartbild.');
-}
-$('start').onclick = async () => {
+async function connectSensors() {
   if (running || starting) return;
   starting = true;
-  $('start').disabled = true;
-  $('reset').disabled = true;
-  tracker = new WalkingTracker();
-  markers = [];
-  render();
+  $('permission').disabled = true;
   source = new LiveSensorSource(
     (sample) => {
+      sampleOrigin ??= sample.t;
+      sample = { ...sample, t: sample.t - sampleOrigin };
       tracker.process(sample);
       if (sample.t - (tracker.lastRender ?? -1) >= 0.1) {
         render();
@@ -62,26 +51,31 @@ $('start').onclick = async () => {
   try {
     await source.start();
     running = true;
-    $('stop').disabled = false;
+    $('permission').hidden = true;
     $('status').textContent = 'Loggar';
     message('Loggar sensorer. Börja gå med telefonen riktad framåt.');
   } catch (error) {
     source?.stop();
     source = null;
-    $('start').disabled = false;
-    $('reset').disabled = false;
+    $('permission').hidden = false;
+    $('status').textContent = 'Sensorer ej anslutna';
     message(error.message);
   } finally {
     starting = false;
+    $('permission').disabled = false;
   }
-};
-$('stop').onclick = stop;
+}
+$('permission').onclick = connectSensors;
 $('reset').onclick = () => {
-  if (running || starting) return;
   tracker = new WalkingTracker();
   markers = [];
+  sampleOrigin = null;
   render();
-  message('Ny karta. Tryck Starta mätning.');
+  message(
+    running
+      ? 'Ny karta. Sensorerna fortsätter logga direkt.'
+      : 'Ny karta. Inväntar sensorbehörighet.',
+  );
 };
 $('autoZoom').onchange = () => {
   map.follow = $('autoZoom').checked;
@@ -149,4 +143,11 @@ document.addEventListener('visibilitychange', () => {
     message('Håll sidan synlig. Webbläsaren kan pausa sensorer i bakgrunden.');
 });
 render();
+const needsGesture = [globalThis.DeviceMotionEvent, globalThis.DeviceOrientationEvent].some(
+  (type) => typeof type?.requestPermission === 'function',
+);
+if (needsGesture) {
+  $('permission').hidden = false;
+  message('Tillåt rörelsesensorerna. Därefter loggas rörelsen automatiskt.');
+} else await connectSensors();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
