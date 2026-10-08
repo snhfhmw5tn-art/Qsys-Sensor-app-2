@@ -1,24 +1,14 @@
-import {
-  SensorPreprocessor,
-  MotionFeatureExtractor,
-  StepDetector,
-  HeadingEstimator,
-  SensorBuffer,
-} from './pipeline.js';
+import { SensorPreprocessor, HeadingEstimator } from './pipeline.js';
 import { radians, wrap, config as C } from '../shared/config.js';
 export class WalkingTracker {
   constructor() {
     this.preprocessor = new SensorPreprocessor();
-    this.extractor = new MotionFeatureExtractor();
-    this.detector = new StepDetector();
+    this.detector = new ImmediateStepDetector();
     this.heading = new HeadingEstimator();
     this.attitude = new HeadingEstimator();
     this.attitudeOffset = null;
-    this.window = new SensorBuffer(C.windowSeconds);
     this.history = [];
     this.raw = [];
-    this.lastFeature = -1;
-    this.features = null;
     this.state = {
       x: 0,
       y: 0,
@@ -44,20 +34,13 @@ export class WalkingTracker {
   }
   process(raw) {
     if (this.previous !== undefined && raw.t - this.previous > C.maximumSampleGap) {
-      this.window.samples = [];
-      this.detector = new StepDetector();
-      this.features = null;
+      this.detector = new ImmediateStepDetector();
       this.preprocessor.previous = null;
     }
     this.previous = raw.t;
     this.hasGyro = Array.isArray(raw.gyro);
     this.raw.push(structuredClone(raw));
     const s = this.preprocessor.process(raw);
-    this.window.add(s);
-    if (s.t - this.lastFeature >= C.featureInterval) {
-      this.features = this.extractor.extract(this.window.samples);
-      this.lastFeature = s.t;
-    }
     this.heading.update(s, null, 'Standing');
     this.history.push({
       t: s.t,
@@ -66,10 +49,9 @@ export class WalkingTracker {
       yawRate: s.yawRate,
       vertical: s.vertical,
       nav: s.nav,
-      features: this.features,
       bias: [...this.preprocessor.bias],
     });
-    for (const peak of this.detector.update(s, this.features, true)) {
+    for (const peak of this.detector.update(s)) {
       const h = this.history.findLast((p) => p.t <= peak.t)?.phoneHeading ?? this.heading.deviceYaw;
       const length = 0.7;
       this.state.x += length * Math.sin(radians(h));
@@ -87,5 +69,19 @@ export class WalkingTracker {
     this.state.heading = this.state.deviceHeading = this.heading.deviceYaw;
     this.state.t = s.t;
     return this.state;
+  }
+}
+
+// Count every upward acceleration threshold crossing immediately. No gait
+// validation, minimum interval, buffered confirmation or rejected-step logic.
+export class ImmediateStepDetector {
+  constructor() {
+    this.above = false;
+  }
+  update(sample) {
+    const above = sample.vertical > C.stepThreshold;
+    const crossed = above && !this.above;
+    this.above = above;
+    return crossed ? [{ t: sample.t }] : [];
   }
 }

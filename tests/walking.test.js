@@ -47,3 +47,22 @@ test('attitude corrects small gyro error immediately but rejects compass jumps',
   tracker.orient({ alpha: 130, beta: 90, gamma: 0 }, 0.2);
   assert.ok(Math.abs(tracker.state.deviceHeading + 20) < 1e-8);
 });
+test('first acceleration pulse counts immediately without gait confirmation', () => {
+  const tracker = new WalkingTracker();
+  tracker.process({
+    t: 0,
+    gravityAcceleration: [0, 0, 9.80665],
+    linearAcceleration: [0, 0, 0],
+    gyro: [0, 0, 0],
+    orientation: { alpha: 0, beta: 0, gamma: 0 },
+  });
+  tracker.process({
+    t: 0.02,
+    gravityAcceleration: [0, 0, 19.80665],
+    linearAcceleration: [0, 0, 10],
+    gyro: [0, 0, 0],
+    orientation: { alpha: 0, beta: 0, gamma: 0 },
+  });
+  assert.equal(tracker.state.steps, 1);
+  assert.equal(tracker.state.distance, 0.7);
+});

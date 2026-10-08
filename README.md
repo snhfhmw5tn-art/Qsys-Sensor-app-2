@@ -6,7 +6,7 @@ Mobilanpassad rörelsekarta som ritar gång med telefonens accelerometer, gyrosk
 
 Öppna appen via HTTPS på telefonen. Loggningen börjar automatiskt. På telefoner som kräver ett tryck för sensorbehörighet visas **Tillåt sensorer**. Gå med telefonen riktad framåt. **Ny karta** rensar mätningen och sätter en ny startpunkt medan sensorerna fortsätter logga.
 
-Steg bekräftas med återkommande accelerationsmönster; de första stegen ritas när gångmönstret är bekräftat. Sträckan uppskattas med 0,70 meter per steg. Telefonens relativa rotation ger spårets riktning. Separata telefonvridningar kan därför tolkas som svängar. Detta är en sensorprototyp, inte uppmätt markposition.
+Varje uppåtgående passage av accelerationströskeln räknas direkt som ett steg. Ingen kontroll av gångmönster, stegtakt eller falska steg görs. Sträckan uppskattas med 0,70 meter per steg. Telefonens relativa rotation ger spårets riktning. Separata telefonvridningar kan därför tolkas som svängar. Detta är en sensorprototyp, inte uppmätt markposition.
 
 Autozoom visar hela spåret. Under **Felsökning** visas sensorernas status. Kartan ligger i minnet och försvinner vid omladdning.
 
