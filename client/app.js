@@ -5,6 +5,10 @@ import { LocalMapRenderer, orangeMarker } from './maps.js';
 const $ = (id) => document.getElementById(id);
 let adjustmentWindowMs = 700;
 let compass = null;
+let gyroHeading = 0,
+  gyroTime = null,
+  gyroAvailable = false,
+  accelerationG = null;
 const compassEvents = [];
 let tracker = new WalkingTracker({ stepLength: 0.76, adjustmentWindowMs }),
   calibratedLength = 0.76,
@@ -35,36 +39,26 @@ function archiveSegment(nextPhase) {
 const map = new LocalMapRenderer($('map'));
 function render() {
   const s = tracker.state;
-  const analysis = tracker.travel.diagnostics(s.deviceHeading);
-  // Sensor-relative angles have the opposite handedness to the front-facing SVG.
-  const zeroAngle = -analysis.zeroReferenceRelativePhone;
-  const candidateAngle = compass?.heading ?? 0;
-  $('zeroArrow').setAttribute('transform', 'rotate(' + zeroAngle + ' 110 110)');
-  $('directionArrow').setAttribute('transform', 'rotate(' + candidateAngle + ' 110 110)');
-  $('directionArrow').setAttribute('stroke-dasharray', 'none');
-  $('zeroAngle').textContent = Math.round(zeroAngle) + '°';
+  $('directionArrow').setAttribute('transform', 'rotate(' + (compass?.heading ?? 0) + ' 110 110)');
   $('directionArrow').style.display = compass ? '' : 'none';
-  $('candidateAngle').textContent = compass ? compassLabel(compass.heading) : 'Kompassdata saknas';
-  const states = {
-    waiting: 'Inväntar gångdata.',
-    collecting: 'Samlar gångdata för ny beräkning.',
-    weak: 'För svagt gångmönster. Ingen ny referens bekräftas.',
-    rejected: 'Avvikande gångaxel. Behåller senaste riktning.',
-    confirmed: 'Riktning beräknad och referens kontrollerad.',
-  };
-  $('analysisStatus').textContent =
-    (analysis.pendingSince !== null ? 'Ny nollreferens utreds. ' : '') +
-    (states[analysis.state] ?? states.waiting);
-  $('analysisProgress').value = analysis.progress;
-  $('referenceTiming').textContent =
-    'Kontroll cirka var 100 ms · Bekräftelser: ' +
-    analysis.confirmationCount +
-    ' · Analysfönster: ' +
-    analysis.windowMs +
-    ' ms · Senaste beräkning: ' +
-    (analysis.lastConfirmedAt === null ? 'ingen' : analysis.lastConfirmedAt.toFixed(1) + ' s') +
-    ' · Senaste nya nollreferens: ' +
-    (analysis.lastReferenceChange ? analysis.lastReferenceChange.t.toFixed(1) + ' s' : 'ingen');
+  $('compassValue').textContent = compass ? compassLabel(compass.heading) : 'Data saknas';
+  $('phoneArrow').setAttribute('transform', 'rotate(' + s.deviceHeading + ' 110 110)');
+  $('phoneValue').textContent = Math.round(s.deviceHeading) + '° från start';
+  $('gyroArrow').setAttribute('transform', 'rotate(' + gyroHeading + ' 110 110)');
+  $('gyroArrow').style.display = gyroAvailable ? '' : 'none';
+  $('gyroValue').textContent = gyroAvailable
+    ? Math.round(gyroHeading) + '° från start'
+    : 'Data saknas';
+  $('accelDot').style.display = accelerationG ? '' : 'none';
+  if (accelerationG) {
+    const [x, y, z] = accelerationG;
+    const radius = Math.hypot(x, y),
+      scale = radius > 2 ? 2 / radius : 1;
+    $('accelDot').setAttribute('cx', 110 + x * scale * 40);
+    $('accelDot').setAttribute('cy', 110 - y * scale * 40);
+    $('accelValue').textContent =
+      'X ' + x.toFixed(2) + ' · Y ' + y.toFixed(2) + ' · Z ' + z.toFixed(2) + ' g';
+  } else $('accelValue').textContent = 'Data saknas';
   map.render({ ...s, markers: markers.filter((m) => m.segment === segments.length) });
   $('markDeviation').disabled = !tracker.drawing;
   $('distance').textContent = s.distance.toLocaleString('sv-SE', {
@@ -101,6 +95,14 @@ async function connectSensors() {
       sampleOrigin ??= sample.t;
       sample = { ...sample, sourceT: sample.t, t: sample.t - sampleOrigin };
       tracker.process(sample);
+      const rate = tracker.history.at(-1)?.yawRate;
+      gyroAvailable = Array.isArray(sample.gyro) && Number.isFinite(rate);
+      if (gyroAvailable && gyroTime !== null) {
+        const dt = sample.t - gyroTime;
+        if (dt > 0 && dt <= 0.5) gyroHeading = ((gyroHeading - rate * dt + 540) % 360) - 180;
+      }
+      gyroTime = sample.t;
+      accelerationG = sample.gravityAcceleration?.map((v) => v / C.gravity) ?? null;
       scheduleRender();
     },
     () => {},
@@ -150,6 +152,7 @@ async function connectSensors() {
 $('permission').onclick = connectSensors;
 function selectView(reference) {
   $('referenceView').hidden = !reference;
+  document.body.classList.toggle('reference-mode', reference);
   $('mapView').hidden = reference;
   $('showMap').setAttribute('aria-pressed', String(!reference));
   $('showReference').setAttribute('aria-pressed', String(reference));
@@ -190,6 +193,10 @@ $('reset').onclick = () => {
   segments.length = 0;
   statusEvents.length = 0;
   markers.length = 0;
+  gyroHeading = 0;
+  gyroTime = null;
+  gyroAvailable = false;
+  accelerationG = null;
   compassEvents.length = 0;
   historyStartedAt = new Date().toISOString();
   phase = calibratedLength !== null ? 'walking' : 'waiting';

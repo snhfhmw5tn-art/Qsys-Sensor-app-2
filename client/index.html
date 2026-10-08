@@ -60,111 +60,133 @@
         <button id="showMap" aria-pressed="true">Karta</button>
         <button id="showReference" aria-pressed="false">Referensvy</button>
       </div>
-      <section id="referenceView" class="reference-view" hidden aria-label="Referens och kompass">
-        <h2>Referens och kompass</h2>
-        <p>
-          Blå visar nollreferensen relativt telefonen. Grön visar telefonens kompassriktning med
-          norr uppåt.
-        </p>
-        <svg viewBox="0 0 220 220" role="img" aria-label="Blå nollreferens relativt telefonen">
-          <circle cx="110" cy="110" r="90" fill="none" stroke="#36515e" />
-          <path d="M110 15V30 M110 190V205 M15 110H30 M190 110H205" stroke="#67818f" />
-          <text x="110" y="12" text-anchor="middle" fill="#e8ac61" font-size="10">
-            TELEFONENS ÖVERKANT
-          </text>
-          <g id="zeroArrow" transform="rotate(0 110 110)">
-            <path
-              d="M110 110V44 M99 59L110 42L121 59"
-              fill="none"
-              stroke="#7eafff"
-              stroke-width="5"
-            />
-          </g>
-
-          <circle cx="110" cy="110" r="5" fill="#fff" />
-        </svg>
-        <p>
-          <span class="zero-legend">Blå: bekräftad nollreferens</span> <b id="zeroAngle">0°</b
-          ><br />
-          <span class="green">Grön: telefonens kompassriktning</span>
-          <b id="candidateAngle">Kompassdata saknas</b>
-        </p>
-        <svg viewBox="0 0 220 220" role="img" aria-label="Telefonens kompassriktning, norr uppåt">
-          <circle cx="110" cy="110" r="90" fill="none" stroke="#36515e" />
-          <g fill="#b0c5ce" text-anchor="middle" font-size="13">
-            <text x="110" y="16">N</text>
-            <text x="210" y="115">E</text>
-            <text x="110" y="218">S</text>
-            <text x="10" y="115">W</text>
-          </g>
-          <g id="directionArrow" transform="rotate(0 110 110)">
-            <path
-              d="M110 110V63 M103 74L110 61L117 74"
-              fill="none"
-              stroke="#56e2c9"
-              stroke-width="4"
-            />
-          </g>
-          <circle cx="110" cy="110" r="5" fill="#fff" />
-        </svg>
-        <p id="analysisStatus" role="status">Inväntar gångdata.</p>
-        <label>Fönsterfyllnad <progress id="analysisProgress" max="1" value="0"></progress></label>
-        <p id="referenceTiming"></p>
-        <p class="note">
-          Blå uppdateras när gångdata bekräftar telefonens nya referens. Kompassen använder separat
-          kompassdata och visar inte beräknad färdriktning. Grön pil döljs när kompassdata saknas.
-        </p>
+      <section
+        id="referenceView"
+        class="reference-view sensor-grid"
+        hidden
+        aria-label="Sensorreferenser"
+      >
+        <div class="sensor-card">
+          <h2>Kompass</h2>
+          <svg viewBox="0 0 220 220" role="img" aria-label="Kompass">
+            <circle cx="110" cy="110" r="90" fill="none" stroke="#36515e" />
+            <text x="110" y="16" text-anchor="middle" fill="#b0c5ce" font-size="12">N</text>
+            <g id="directionArrow">
+              <path
+                d="M110 110V44 M99 59L110 42L121 59"
+                fill="none"
+                stroke="#56e2c9"
+                stroke-width="5"
+              />
+            </g>
+            <circle cx="110" cy="110" r="4" fill="#fff" />
+          </svg>
+          <p id="compassValue">Data saknas</p>
+        </div>
+        <div class="sensor-card">
+          <h2>Telefonens riktning</h2>
+          <svg viewBox="0 0 220 220" role="img" aria-label="Telefonens riktning">
+            <circle cx="110" cy="110" r="90" fill="none" stroke="#36515e" />
+            <text x="110" y="16" text-anchor="middle" fill="#b0c5ce" font-size="12">START 0°</text>
+            <g id="phoneArrow">
+              <path
+                d="M110 110V44 M99 59L110 42L121 59"
+                fill="none"
+                stroke="#e8ac61"
+                stroke-width="5"
+              />
+            </g>
+            <circle cx="110" cy="110" r="4" fill="#fff" />
+          </svg>
+          <p id="phoneValue">Data saknas</p>
+        </div>
+        <div class="sensor-card">
+          <h2>Gyro</h2>
+          <svg viewBox="0 0 220 220" role="img" aria-label="Gyro">
+            <circle cx="110" cy="110" r="90" fill="none" stroke="#36515e" />
+            <text x="110" y="16" text-anchor="middle" fill="#b0c5ce" font-size="12">START 0°</text>
+            <g id="gyroArrow">
+              <path
+                d="M110 110V44 M99 59L110 42L121 59"
+                fill="none"
+                stroke="#7eafff"
+                stroke-width="5"
+              />
+            </g>
+            <circle cx="110" cy="110" r="4" fill="#fff" />
+          </svg>
+          <p id="gyroValue">Data saknas</p>
+        </div>
+        <div class="sensor-card">
+          <h2>Accelerometer · g-krafter</h2>
+          <svg
+            viewBox="0 0 220 220"
+            role="img"
+            aria-label="G-krafter i telefonens X- och Y-led, cirkel 2 g"
+          >
+            <circle cx="110" cy="110" r="80" fill="none" stroke="#36515e" />
+            <circle cx="110" cy="110" r="40" fill="none" stroke="#28404d" />
+            <path d="M20 110H200 M110 20V200" stroke="#36515e" />
+            <text x="195" y="105" fill="#b0c5ce" font-size="12">X</text>
+            <text x="115" y="25" fill="#b0c5ce" font-size="12">Y</text>
+            <circle id="accelDot" cx="110" cy="110" r="7" fill="#da9aff" />
+          </svg>
+          <p id="accelValue">Data saknas</p>
+        </div>
       </section>
       <div class="map-wrap" id="mapView">
         <canvas id="map" aria-label="Gångspår med telefonens riktning"></canvas
         ><span class="map-label">STARTENS RIKTNING ↑ · METER</span>
       </div>
-      <div class="controls" style="margin-top: 12px">
-        <button id="markDeviation" disabled>Lägg markör på orange linje</button>
-        <label
-          >Namn på testet
-          <input id="historyName" value="gangkarta-uppratt-telefon" maxlength="60" /></label
-        ><button id="saveServer">Spara till fil på servern</button>
-      </div>
-      <p><a id="savedFile" hidden download></a></p>
-      <div class="map-options">
-        <label
-          >Analysfönster (ms)
-          <input
-            id="adjustmentWindow"
-            type="number"
-            min="400"
-            max="5000"
-            step="1"
-            value="700"
-            inputmode="numeric"
-          />
-        </label>
-        <label><input id="autoZoom" type="checkbox" checked /> Autozoom – visa hela spåret</label
-        ><span
-          ><i class="green">━ ➤</i> Beräknad färdväg <i class="orange">━ ▯</i> Telefonreferens</span
-        >
-      </div>
-      <p id="directionQuality" class="note" role="status">Färdriktning: inväntar gångmönster</p>
-      <p class="note">
-        Sträckan räknas med vald steglängd, från start 0,76 m/steg. Kartan visar relativ rörelse.
-        Telefonvridningar kan påverka spåret.
-      </p>
-      <details>
-        <summary>Felsökning</summary>
-        <div class="controls">
-          <button id="exportHistory">Exportera all sensorhistorik</button>
+      <section id="mapTools">
+        <div class="controls" style="margin-top: 12px">
+          <button id="markDeviation" disabled>Lägg markör på orange linje</button>
+          <label
+            >Namn på testet
+            <input id="historyName" value="gangkarta-uppratt-telefon" maxlength="60" /></label
+          ><button id="saveServer">Spara till fil på servern</button>
         </div>
-        <p>
-          Inkluderar sensorhistorik från senaste Ny karta och aktuell kartbild. Exportera innan
-          sidan laddas om eller stängs.
+        <p><a id="savedFile" hidden download></a></p>
+        <div class="map-options">
+          <label
+            >Analysfönster (ms)
+            <input
+              id="adjustmentWindow"
+              type="number"
+              min="400"
+              max="5000"
+              step="1"
+              value="700"
+              inputmode="numeric"
+            />
+          </label>
+          <label><input id="autoZoom" type="checkbox" checked /> Autozoom – visa hela spåret</label
+          ><span
+            ><i class="green">━ ➤</i> Beräknad färdväg
+            <i class="orange">━ ▯</i> Telefonreferens</span
+          >
+        </div>
+        <p id="directionQuality" class="note" role="status">Färdriktning: inväntar gångmönster</p>
+        <p class="note">
+          Sträckan räknas med vald steglängd, från start 0,76 m/steg. Kartan visar relativ rörelse.
+          Telefonvridningar kan påverka spåret.
         </p>
-        <p id="sensors">Väntar på sensorer.</p>
-        <p>
-          Steg kräver återkommande gångrytm och horisontell acceleration. De första stegen bekräftas
-          tillsammans. Enbart vertikal telefonrörelse räcker inte.
-        </p>
-      </details>
+        <details>
+          <summary>Felsökning</summary>
+          <div class="controls">
+            <button id="exportHistory">Exportera all sensorhistorik</button>
+          </div>
+          <p>
+            Inkluderar sensorhistorik från senaste Ny karta och aktuell kartbild. Exportera innan
+            sidan laddas om eller stängs.
+          </p>
+          <p id="sensors">Väntar på sensorer.</p>
+          <p>
+            Steg kräver återkommande gångrytm och horisontell acceleration. De första stegen
+            bekräftas tillsammans. Enbart vertikal telefonrörelse räcker inte.
+          </p>
+        </details>
+      </section>
     </main>
     <script type="module" src="/client/app.js"></script>
   </body>

@@ -207,3 +207,25 @@ details p {
   width: 100%;
   accent-color: #56e2c9;
 }
+
+.sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.sensor-card {
+  min-width: 0;
+  text-align: center;
+}
+.sensor-card h2 {
+  font-size: 16px;
+}
+.sensor-card p {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.reference-mode .calibration,
+.reference-mode .stats,
+.reference-mode #mapTools {
+  display: none;
+}
