@@ -6,8 +6,6 @@ let tracker = new WalkingTracker(),
   source = null,
   running = false,
   starting = false,
-  build = null,
-  markers = [],
   sampleOrigin = null;
 const statuses = {};
 const map = new LocalMapRenderer($('map'));
@@ -68,7 +66,6 @@ async function connectSensors() {
 $('permission').onclick = connectSensors;
 $('reset').onclick = () => {
   tracker = new WalkingTracker();
-  markers = [];
   sampleOrigin = null;
   render();
   message(
@@ -81,56 +78,9 @@ $('autoZoom').onchange = () => {
   map.follow = $('autoZoom').checked;
   render();
 };
-function save(blob, name) {
-  const url = URL.createObjectURL(blob),
-    a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-$('mark').onclick = () => {
-  markers.push({ t: tracker.state.t ?? 0, x: tracker.state.x, y: tracker.state.y });
-  message('Avvikelse tidsmarkerad. Spara sensorhistoriken efter promenaden.');
-};
-$('export').onclick = () => {
-  render();
-  save(
-    new Blob(
-      [
-        JSON.stringify({
-          format: 'qsys-walking-debug',
-          version: 1,
-          created: new Date().toISOString(),
-          build,
-          stepLength: 0.7,
-          environment: {
-            userAgent: navigator.userAgent,
-            secureContext: globalThis.isSecureContext,
-            statuses,
-          },
-          samples: tracker.raw,
-          history: tracker.history,
-          state: tracker.state,
-          markers,
-          mapImage: $('map').toDataURL('image/png'),
-        }),
-      ],
-      { type: 'application/json' },
-    ),
-    'qsys-ganghistorik.json',
-  );
-};
-$('image').onclick = () => {
-  render();
-  $('map').toBlob((blob) => {
-    if (blob) save(blob, 'qsys-gangkarta.png');
-  });
-};
 fetch('/client/version.json', { cache: 'no-store' })
   .then((r) => r.json())
   .then((v) => {
-    build = v;
     $('buildVersion').textContent =
       'Senaste commit: ' +
       new Date(v.committedAt).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' }) +
