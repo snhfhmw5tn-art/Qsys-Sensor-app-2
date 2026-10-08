@@ -116,7 +116,7 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#101d29';
     ctx.fillRect(0, 0, w, h);
-    const viewHeading = state.heading ?? 0;
+    const viewHeading = 0;
     if (this.follow) {
       const fit = fitTrajectory(
         [...state.trajectory, ...(state.referenceTrajectory ?? []), state].map((p) =>

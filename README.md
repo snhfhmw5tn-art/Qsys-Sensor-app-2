@@ -8,7 +8,7 @@ Mobilanpassad rörelsekarta som ritar gång med telefonens accelerometer, gyrosk
 
 Varje uppåtgående passage av accelerationströskeln räknas direkt som ett steg. Ingen kontroll av gångmönster, stegtakt eller falska steg görs. Sträckan uppskattas med 0,70 meter per steg. Telefonens relativa rotation ger spårets riktning. Separata telefonvridningar kan därför tolkas som svängar. Detta är en sensorprototyp, inte uppmätt markposition.
 
-Kartan roterar så att den beräknade färdriktningen alltid är uppåt. Autozoom visar hela spåret även när kartan roterar. Under **Felsökning** visas sensorernas status. Kartan ligger i minnet och försvinner vid omladdning.
+Kartan har fast orientering med startens riktning uppåt. Autozoom visar hela spåret. Under **Felsökning** visas sensorernas status. Kartan ligger i minnet och försvinner vid omladdning.
 
 ## Lokal utveckling
 
