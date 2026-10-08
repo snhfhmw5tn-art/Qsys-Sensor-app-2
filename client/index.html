@@ -50,6 +50,59 @@
           Kalibreringssteg: <b id="calibrationSteps">0</b> · Steglängd:
           <b id="stride">0,76 m/steg</b>
         </p>
+        <details id="testView">
+          <summary>Testvy – samla sensordata</summary>
+          <p>
+            Välj det du faktiskt ska göra. Varje test får egen historik, separat från kartan. Håll
+            sidan öppen under testet.
+          </p>
+          <div class="controls">
+            <label
+              >Testtyp
+              <select id="testType">
+                <option value="Walking">Gång</option>
+                <option value="Standing">Stillastående</option>
+                <option value="Running">Löpning</option>
+                <option value="Cart">Rullvagn</option>
+                <option value="Forklift">Truck</option>
+              </select></label
+            >
+            <label
+              >Telefonläge
+              <select id="testPose"></select
+            ></label>
+            <label id="testSpeedLabel" hidden
+              >Fartkategori
+              <select id="testSpeed">
+                <option value="walking">Gångfart</option>
+                <option value="medium">Medelfart</option>
+                <option value="fast">Snabb fart</option>
+              </select></label
+            >
+            <label id="testDistanceLabel"
+              >Känd teststräcka (meter, valfritt)
+              <input
+                id="testDistance"
+                type="number"
+                min="0"
+                step="0.1"
+                inputmode="decimal"
+                placeholder="Till exempel 19"
+            /></label>
+          </div>
+          <p id="testInstructions"></p>
+          <div class="stats">
+            <div><b id="testLiveSteps">0</b><span>registrerade steg i testet</span></div>
+            <div><b id="testLiveTime">0 s</b><span>testtid</span></div>
+            <div><b id="testLiveSamples">0</b><span>råa sensorprov</span></div>
+          </div>
+          <div class="controls">
+            <button id="startTest">Starta test</button
+            ><button id="finishTest" disabled>Avsluta och spara på servern</button>
+          </div>
+          <p id="testStatus" role="status">Välj ett test.</p>
+          <p><a id="testSavedFile" hidden download></a></p>
+        </details>
       </section>
       <section class="stats" aria-label="Mätning">
         <div><b id="distance">0,0</b><span>meter · uppskattat</span></div>

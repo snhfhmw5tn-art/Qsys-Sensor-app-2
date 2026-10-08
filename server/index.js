@@ -118,7 +118,7 @@ async function handler(req, res) {
       }).formatToParts(new Date(savedAt));
       const part = (type) => parts.find((p) => p.type === type).value;
       const id = randomBytes(24).toString('hex');
-      const filename =
+      let filename =
         'sensorhistorik-' +
         description +
         '-' +
@@ -136,19 +136,41 @@ async function handler(req, res) {
         '-' +
         id.slice(0, 8) +
         '.json';
+      const isMovementTest = payload.test?.kind === 'movement-test';
+      if (isMovementTest) {
+        const stamp =
+          part('year') +
+          '-' +
+          part('month') +
+          '-' +
+          part('day') +
+          '_' +
+          part('hour') +
+          '-' +
+          part('minute') +
+          '-' +
+          part('second');
+        filename = stamp + '_' + description + '--' + id + '.json';
+      }
       const directory = path.join(data, 'sensor-history');
       await mkdir(directory, { recursive: true });
       const saved = { ...payload, serverFile: { filename, savedAt, timeZone: 'Europe/Stockholm' } };
-      await writeFile(path.join(directory, id + '--' + filename), JSON.stringify(saved), {
-        flag: 'wx',
-      });
+      await writeFile(
+        path.join(directory, isMovementTest ? filename : id + '--' + filename),
+        JSON.stringify(saved),
+        {
+          flag: 'wx',
+        },
+      );
       return json(res, 201, { filename, savedAt, downloadUrl: '/api/sensor-history/' + id });
     }
     const historyMatch = url.pathname.match(/^\/api\/sensor-history\/([a-f0-9]{48})$/);
     if (req.method === 'GET' && historyMatch) {
       const directory = path.join(data, 'sensor-history');
-      const name = (await readdir(directory)).find((name) =>
-        name.startsWith(historyMatch[1] + '--'),
+      const name = (await readdir(directory)).find(
+        (name) =>
+          name.startsWith(historyMatch[1] + '--') ||
+          name.endsWith('--' + historyMatch[1] + '.json'),
       );
       if (!name) return json(res, 404, { error: 'History not found' });
       const bytes = await readFile(path.join(directory, name));

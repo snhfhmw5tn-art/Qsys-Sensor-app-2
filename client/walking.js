@@ -9,13 +9,14 @@ import {
 } from './pipeline.js';
 import { radians, wrap, config as C } from '../shared/config.js';
 export class WalkingTracker {
-  constructor({ stepLength = 0.7, drawing = true } = {}) {
+  constructor({ stepLength = 0.7, drawing = true, countSteps = true } = {}) {
     this.stepLength = stepLength;
     this.activity = new ActivityEstimator();
     this.vehicle = new VehicleDistance();
     this.wasVehicle = false;
     this.transportType = 'Auto';
     this.drawing = drawing;
+    this.countSteps = countSteps;
     this.preprocessor = new SensorPreprocessor();
     this.detector = new GaitStepDetector();
     this.heading = new HeadingEstimator();
@@ -55,8 +56,9 @@ export class WalkingTracker {
   }
   exportHistory() {
     return {
-      stepLength: this.stepLength,
+      stepLength: this.countSteps ? this.stepLength : null,
       drawing: this.drawing,
+      stepsEnabled: this.countSteps,
       samples: this.raw,
       orientationEvents: this.orientations,
       derived: this.history,
@@ -83,7 +85,8 @@ export class WalkingTracker {
       )
         this.orient(s.orientation, orientationTime, false);
     }
-    const peaks = this.detector.update(s);
+    const detectedPeaks = this.detector.update(s);
+    const peaks = this.countSteps ? detectedPeaks : [];
     this.state.activity = this.activity.update(
       this.detector.features,
       s.t,

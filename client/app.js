@@ -1,8 +1,11 @@
+import { TestSession, testTypes, bodyPoses, vehiclePoses } from './test-session.js';
 import { config as C } from '../shared/config.js';
 import { WalkingTracker } from './walking.js';
 import { LiveSensorSource } from './sources.js';
 import { LocalMapRenderer, orangeMarker } from './maps.js';
 const $ = (id) => document.getElementById(id);
+let testSession = null,
+  testSaving = false;
 let tracker = new WalkingTracker({ stepLength: 0.76 }),
   calibratedLength = 0.76,
   calibrating = false,
@@ -31,6 +34,13 @@ function archiveSegment(nextPhase) {
 
 const map = new LocalMapRenderer($('map'));
 function render() {
+  if (testSession) {
+    $('testLiveSteps').textContent = testSession.metadata.stepsEnabled
+      ? testSession.tracker.state.steps
+      : '—';
+    $('testLiveSamples').textContent = testSession.tracker.raw.length;
+    $('testLiveTime').textContent = Math.floor(testSession.tracker.state.t ?? 0) + ' s';
+  }
   const s = tracker.state;
   $('activity').textContent = s.activity.label;
   $('activityProbability').textContent =
@@ -51,7 +61,7 @@ function render() {
   $('steps').textContent = s.steps;
   $('heading').textContent = Math.round(s.heading) + '°';
   $('calibrationSteps').textContent = calibrating ? s.steps : 0;
-  $('finishCalibration').disabled = !calibrating || !s.steps;
+  $('finishCalibration').disabled = !!testSession?.active || testSaving || !calibrating || !s.steps;
 }
 function message(text) {
   $('message').textContent = text;
@@ -71,6 +81,7 @@ async function connectSensors() {
   $('permission').disabled = true;
   source = new LiveSensorSource(
     (sample) => {
+      testSession?.process(sample);
       sampleOrigin ??= sample.t;
       sample = { ...sample, sourceT: sample.t, t: sample.t - sampleOrigin };
       tracker.transportType = $('transportType').value;
@@ -81,6 +92,8 @@ async function connectSensors() {
     (key, value) => {
       if (statuses[key] !== value)
         statusEvents.push({ at: new Date().toISOString(), sensor: key, status: value });
+      if (statuses[key] !== value)
+        testSession?.event({ at: new Date().toISOString(), sensor: key, status: value });
       statuses[key] = value;
       $('sensors').textContent = Object.entries(statuses)
         .map(([k, v]) => k + ': ' + v)
@@ -89,6 +102,7 @@ async function connectSensors() {
         message('Ingen accelerometerdata. Kontrollera sensorbehörighet och håll sidan öppen.');
     },
     (orientation, t) => {
+      testSession?.orient(orientation, t);
       sampleOrigin ??= t;
       tracker.orient(orientation, t - sampleOrigin);
       scheduleRender();
@@ -111,6 +125,126 @@ async function connectSensors() {
     $('permission').disabled = false;
   }
 }
+function testOptions() {
+  const type = $('testType').value;
+  const vehicle = testTypes[type].vehicle;
+  $('testPose').replaceChildren(
+    ...Object.entries(vehicle ? vehiclePoses : bodyPoses).map(
+      ([value, label]) => new Option(label, value),
+    ),
+  );
+  $('testSpeedLabel').hidden = !vehicle;
+  $('testDistanceLabel').hidden = type === 'Standing';
+  $('testInstructions').textContent = vehicle
+    ? 'Telefonen ska ligga fixerad på fordonet. Välj telefonläge, fart och en känd sträcka. Inga steg eller steglängder registreras.'
+    : type === 'Standing'
+      ? 'Stå kvar på samma plats. Eventuella registrerade steg blir exempel på falska steg.'
+      : 'Gå eller spring med valt telefonläge. Stegen visas live. Testet ändrar inte din kalibrerade steglängd.';
+}
+function lockTest(locked) {
+  for (const id of [
+    'testType',
+    'testPose',
+    'testSpeed',
+    'testDistance',
+    'beginCalibration',
+    'finishCalibration',
+    'reset',
+  ])
+    $(id).disabled = locked;
+}
+$('testType').onchange = testOptions;
+testOptions();
+$('startTest').onclick = async () => {
+  if (testSaving || testSession?.active) return;
+  if (calibrating) {
+    $('testStatus').textContent =
+      'Avsluta steglängdskalibreringen innan du startar ett sensortest.';
+    return;
+  }
+  $('startTest').disabled = true;
+  if (!running) await connectSensors();
+  if (!running) {
+    $('startTest').disabled = false;
+    return;
+  }
+  try {
+    const distance = $('testDistance').value.trim();
+    testSession = new TestSession({
+      type: $('testType').value,
+      pose: $('testPose').value,
+      speed: $('testSpeed').value,
+      distance: distance ? Number(distance) : null,
+    });
+    testSession.event({
+      at: new Date().toISOString(),
+      type: 'initial-sensor-status',
+      statuses: structuredClone(statuses),
+    });
+    lockTest(true);
+    $('finishTest').disabled = false;
+    $('finishTest').textContent = 'Avsluta och spara på servern';
+    $('testSavedFile').hidden = true;
+    $('testStatus').textContent =
+      'Test pågår: ' + testSession.metadata.label + ' – ' + testSession.metadata.poseLabel;
+    render();
+  } catch (error) {
+    $('testStatus').textContent = error.message;
+    $('startTest').disabled = false;
+  }
+};
+$('finishTest').onclick = async () => {
+  if (!testSession || testSaving) return;
+  if (!testSession.tracker.raw.length) {
+    $('testStatus').textContent =
+      'Inga sensorprov har kommit. Kontrollera sensorbehörigheten innan testet avslutas.';
+    return;
+  }
+  testSaving = true;
+  $('finishTest').disabled = true;
+  const data = testSession.finish({
+    build,
+    configuration: C,
+    environment: { userAgent: navigator.userAgent, secureContext: globalThis.isSecureContext },
+    units: {
+      time: 'seconds since test source origin',
+      acceleration: 'm/s²',
+      gyro: 'degrees/second',
+      orientation: 'degrees',
+      distance: 'metres',
+    },
+  });
+  $('testStatus').textContent = 'Test avslutat. Sparar sensordata på servern…';
+  render();
+  try {
+    const response = await fetch('/api/sensor-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok)
+      throw new Error(
+        response.status === 413
+          ? 'Testfilen är större än 25 MB. Testet finns kvar i minnet.'
+          : 'Kunde inte spara testet (' + response.status + ').',
+      );
+    const saved = await response.json();
+    const link = $('testSavedFile');
+    link.href = saved.downloadUrl;
+    link.textContent = saved.filename;
+    link.hidden = false;
+    $('testStatus').textContent = 'Sparat på servern. Klicka på filnamnet för att hämta filen.';
+    lockTest(false);
+    $('finishCalibration').disabled = !calibrating || !tracker.state.steps;
+    $('startTest').disabled = false;
+  } catch (error) {
+    $('testStatus').textContent = error.message + ' Tryck Spara igen. Ladda inte om sidan.';
+    $('finishTest').textContent = 'Spara testet igen';
+    $('finishTest').disabled = false;
+  } finally {
+    testSaving = false;
+  }
+};
 $('permission').onclick = connectSensors;
 function captureMapImage() {
   map.render(
@@ -278,6 +412,7 @@ fetch('/client/version.json', { cache: 'no-store' })
   })
   .catch(() => ($('buildVersion').textContent = 'Version saknas'));
 document.addEventListener('visibilitychange', () => {
+  testSession?.event({ at: new Date().toISOString(), type: 'visibility', hidden: document.hidden });
   if (document.hidden && running)
     message('Håll sidan synlig. Webbläsaren kan pausa sensorer i bakgrunden.');
 });

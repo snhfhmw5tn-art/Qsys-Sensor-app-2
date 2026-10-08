@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -55,6 +55,29 @@ test('TestThat_http_retry_atomicity_auth_and_restart_preserve_state', async () =
       savedHistory.filename,
       /sensorhistorik-gangkarta-uppratt-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-[a-f0-9]{8}\.json/,
     );
+    const movementPayload = {
+      ...historyPayload,
+      description: 'test-rullvagn-down-fast',
+      test: { kind: 'movement-test', type: 'Cart', pose: 'down', speed: 'fast' },
+    };
+    const movementUpload = await fetch(base + '/api/sensor-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(movementPayload),
+    });
+    assert.equal(movementUpload.status, 201);
+    const movementFile = await movementUpload.json();
+    assert.match(
+      movementFile.filename,
+      /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_test-rullvagn-down-fast--[a-f0-9]{48}\.json$/,
+    );
+    const physical = JSON.parse(
+      await readFile(path.join(dir, 'sensor-history', movementFile.filename), 'utf8'),
+    );
+    assert.deepEqual(physical.test, movementPayload.test);
+    const download = await fetch(base + movementFile.downloadUrl);
+    assert.equal(download.status, 200);
+    assert.deepEqual((await download.json()).segments, movementPayload.segments);
     const invalid = await fetch(base + '/api/sensor-history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
