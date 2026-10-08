@@ -29,7 +29,10 @@ try {
     if ($conflict) { throw 'HTTPS binding is already in use' }
     & "$env:windir\system32\inetsrv\appcmd.exe" add backup "Sensor2-$(Get-Date -Format yyyyMMdd-HHmmss)" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'IIS backup failed' }
-    if ($existing) { Stop-Website -Name $name; Stop-WebAppPool -Name $pool -ErrorAction SilentlyContinue }
+    if ($existing) {
+        if ($existing.state -eq 'Started') { Stop-Website -Name $name }
+        if ((Get-WebAppPoolState -Name $pool).Value -ne 'Stopped') { Stop-WebAppPool -Name $pool }
+    }
     New-Item -ItemType Directory -Force $target,$dataDir | Out-Null
     # Copy bytes into newly created files so source EFS attributes are not inherited.
     $stageRoot = (Resolve-Path -LiteralPath $Stage).Path.TrimEnd('\')
@@ -37,7 +40,14 @@ try {
         $relative = $_.FullName.Substring($stageRoot.Length).TrimStart('\')
         $dest = Join-Path $target $relative
         [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($dest)) | Out-Null
-        [IO.File]::WriteAllBytes($dest, [IO.File]::ReadAllBytes($_.FullName))
+        $bytes = [IO.File]::ReadAllBytes($_.FullName)
+        for ($attempt = 0; ; $attempt++) {
+            try { [IO.File]::WriteAllBytes($dest, $bytes); break }
+            catch [IO.IOException] {
+                if ($attempt -ge 30) { throw }
+                Start-Sleep -Seconds 1
+            }
+        }
     }
     if (!(Test-Path "IIS:\AppPools\$pool")) { New-WebAppPool -Name $pool | Out-Null }
     Set-ItemProperty "IIS:\AppPools\$pool" -Name managedRuntimeVersion -Value ''
@@ -50,8 +60,18 @@ try {
     & icacls.exe $dataDir /grant "IIS AppPool\${pool}:(OI)(CI)(M)" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Data ACL failed' }
     if (!$existing) { New-Website -Name $name -PhysicalPath $target -ApplicationPool $pool -Port 443 -HostHeader $hostname -Ssl | Out-Null }
-    Set-WebBinding -Name $name -BindingInformation "*:443:$hostname" -PropertyName sslFlags -Value 1
-    (Get-WebBinding -Name $name -Protocol https).AddSslCertificate($thumb,$store)
+    # Use a fresh ServerManager so provider-cached binding objects cannot copy
+    # the source site's hostname onto the destination binding during redeploy.
+    Add-Type -Path "$env:windir\System32\inetsrv\Microsoft.Web.Administration.dll"
+    $manager = New-Object Microsoft.Web.Administration.ServerManager
+    try {
+        $https = $manager.Sites[$name].Bindings | Where-Object { $_.Protocol -eq 'https' } | Select-Object -First 1
+        $https.BindingInformation = "*:443:$hostname"
+        $https.SslFlags = [Microsoft.Web.Administration.SslFlags]1
+        $https.CertificateHash = $cert.GetCertHash()
+        $https.CertificateStoreName = $store
+        $manager.CommitChanges()
+    } finally { $manager.Dispose() }
     $hostsPath = "$env:windir\System32\drivers\etc\hosts"
     $hostsText = [IO.File]::ReadAllText($hostsPath)
     if ($hostsText -notmatch '(?im)^\s*[^#\r\n]+\s+sensor2\.qsys\.se(?:\s|$)') {
@@ -60,6 +80,13 @@ try {
     }
     Start-WebAppPool -Name $pool
     Start-Website -Name $name
+    # IIS can remove the HTTP.sys SNI registration while updating an existing
+    # binding. Ensure it exists after the site configuration has committed.
+    & netsh.exe http show sslcert "hostnameport=${hostname}:443" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        & netsh.exe http add sslcert "hostnameport=${hostname}:443" "certhash=$thumb" "certstorename=$store" 'appid={4dc3e181-e14b-4a21-b022-59fc669b0914}' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'HTTP.sys SNI registration failed' }
+    }
     @{site=$name;url="https://$hostname";path=$target;data=$dataDir;certificate=$thumb;state=(Get-Website -Name $name).state} | ConvertTo-Json | Set-Content -LiteralPath $ResultPath -Encoding UTF8
 } catch {
     @{error=$_.Exception.Message;detail=($_ | Out-String)} | ConvertTo-Json | Set-Content -LiteralPath $ResultPath -Encoding UTF8

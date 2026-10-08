@@ -45,7 +45,7 @@ export const config = Object.freeze({
   maxBodyBytes: 256000,
   maxSessionObservations: 500000,
   pcaAnisotropy: 0.65,
-  pcaGain: 0.08,
+  pcaGain: 0.45,
   maximumSampleGap: 0.5,
   minimumSampleRate: 15,
   featureSampleRate: 50,

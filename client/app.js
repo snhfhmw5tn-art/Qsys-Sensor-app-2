@@ -132,6 +132,7 @@ function renderSensors() {
   );
 }
 function render(s) {
+  if (pipeline) s.deviceHeading = pipeline.heading.deviceYaw;
   state = s;
   set('mode', labels[s.motionMode]);
   set(
@@ -287,6 +288,11 @@ async function start(kind) {
     recording.add(s);
     try {
       pipeline.process(s);
+      if (state && s.t - (pipeline.lastMapUpdate ?? -1) >= 0.1) {
+        state.deviceHeading = pipeline.heading.deviceYaw;
+        renderer.render(state);
+        pipeline.lastMapUpdate = s.t;
+      }
     } catch (e) {
       notice(e.message, true);
       stop();
@@ -514,12 +520,14 @@ for (const b of document.querySelectorAll('[data-heat]'))
   };
 $('zoomIn').onclick = () => {
   if (renderer instanceof LocalMapRenderer) {
+    renderer.follow = false;
     renderer.zoom = Math.min(120, renderer.zoom * 1.25);
     renderer.render(state);
   }
 };
 $('zoomOut').onclick = () => {
   if (renderer instanceof LocalMapRenderer) {
+    renderer.follow = false;
     renderer.zoom = Math.max(2, renderer.zoom / 1.25);
     renderer.render(state);
   }

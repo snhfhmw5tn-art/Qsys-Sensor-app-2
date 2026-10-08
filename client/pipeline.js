@@ -325,23 +325,43 @@ export class HeadingEstimator {
     this.pcaOrigin = null;
     this.deviceYaw = 0;
     this.confidence = 0.3;
+    this.deviceOrigin = null;
+    this.lastFeature = null;
   }
   update(s, f, mode) {
     const delta = s.yawRate * s.dt;
     this.deviceYaw = wrap(this.deviceYaw + delta);
-    this.heading = wrap(this.heading + delta);
+    if (s.orientation) {
+      const matrix = new CoordinateTransformer().matrix(s.orientation);
+      // Upright phone: viewing direction is -Z. Flat phone: top edge is +Y.
+      const axis = Math.abs(matrix[2][1]) > 0.7 ? 2 : 1;
+      const sign = axis === 2 ? -1 : 1;
+      const x = sign * matrix[0][axis],
+        y = sign * matrix[1][axis];
+      if (Math.hypot(x, y) > 0.2) {
+        const bearing = wrap((Math.atan2(x, y) * 180) / Math.PI);
+        this.deviceOrigin ??= bearing;
+        this.deviceYaw = wrap(bearing - this.deviceOrigin);
+      }
+    }
     if (
       f &&
       family(mode) === 'Pedestrian' &&
       f.orientationReliable &&
       f.anisotropy > C.pcaAnisotropy &&
-      Math.abs(f.yawRate) < C.turnRate
+      f.horizontalEnergy > 0.015 &&
+      f.periodicity > 0.35
     ) {
       this.pcaOrigin ??= f.pcaHeading;
       let target = wrap(f.pcaHeading - this.pcaOrigin);
       if (Math.abs(wrap(target - this.heading)) > 90) target = wrap(target + 180);
-      this.heading = wrap(this.heading + C.pcaGain * wrap(target - this.heading));
-      this.confidence = 0.6;
+      // Never integrate device rotation into travel heading. PCA is already in
+      // the navigation frame and therefore independent of how the phone is held.
+      if (f !== this.lastFeature) {
+        this.heading = wrap(this.heading + C.pcaGain * wrap(target - this.heading));
+        this.lastFeature = f;
+      }
+      this.confidence = 0.6 * f.anisotropy;
     } else this.confidence = Math.max(0.15, this.confidence - s.dt * 0.001);
     return this.heading;
   }
@@ -366,6 +386,7 @@ export class SensorPipeline {
     this.lastHeading = 0;
     this.features = null;
     this.pendingSteps = [];
+    this.headingHistory = [];
     this.vehicleSamples = [];
     this.events = [];
     this.lastSample = null;
@@ -398,13 +419,16 @@ export class SensorPipeline {
         this.event('StateChanged', s.t, `${before} → ${this.machine.mode}`);
     }
     this.heading.update(s, this.features, this.machine.mode);
+    this.headingHistory.push({ t: s.t, heading: this.heading.heading });
+    while (this.headingHistory.length && this.headingHistory[0].t < s.t - 8)
+      this.headingHistory.shift();
     const peaks = this.steps.update(s, this.features, family(this.machine.mode) === 'Pedestrian');
     if (peaks.length) {
       this.event('BufferedStepsApplied', s.t, String(peaks.length));
       this.pendingSteps.push(
         ...peaks.map((p) => ({
           timestamp: p.t,
-          heading: this.heading.heading,
+          heading: this.headingHistory.findLast((h) => h.t <= p.t)?.heading ?? this.heading.heading,
           stepInterval: p.interval,
           cadence: 1 / p.interval,
           accelerationAmplitude: p.amplitude,

@@ -33,6 +33,30 @@ const transportColor = (c) =>
 export function heatValue(c, mode) {
   return mode === 'speed' ? c.averageSpeed : mode === 'visits' ? c.visitCount : c.timeSpent;
 }
+export function fitTrajectory(points, width, height, padding = 48) {
+  let minX = 0,
+    maxX = 0,
+    minY = 0,
+    maxY = 0;
+  for (const p of points) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y);
+    maxY = Math.max(maxY, p.y);
+  }
+  return {
+    zoom: Math.max(
+      0.001,
+      Math.min(
+        28,
+        Math.max(1, width - 2 * padding) / Math.max(4, maxX - minX),
+        Math.max(1, height - 2 * padding) / Math.max(4, maxY - minY),
+      ),
+    ),
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
+  };
+}
 export class LocalMapRenderer extends IMapRenderer {
   constructor(canvas) {
     super();
@@ -46,6 +70,7 @@ export class LocalMapRenderer extends IMapRenderer {
     this.resizeObserver.observe(canvas);
     this.wheel = (e) => {
       e.preventDefault();
+      this.follow = false;
       this.zoom = Math.max(2, Math.min(120, this.zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
       this.render(this.state);
     };
@@ -84,11 +109,16 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#101d29';
     ctx.fillRect(0, 0, w, h);
-    if (this.follow) this.pan = { x: -state.x * this.zoom, y: state.y * this.zoom };
+    if (this.follow) {
+      const fit = fitTrajectory([...state.trajectory, state], w, h);
+      this.zoom = fit.zoom;
+      this.pan = { x: -fit.x * this.zoom, y: fit.y * this.zoom };
+    }
     const ox = w / 2 + this.pan.x,
       oy = h / 2 + this.pan.y;
     const project = (p) => ({ x: ox + p.x * this.zoom, y: oy - p.y * this.zoom });
-    const spacing = this.zoom >= 18 ? 1 : this.zoom >= 5 ? 5 : 10;
+    const spacing =
+      this.zoom >= 18 ? 1 : this.zoom >= 5 ? 5 : 10 ** Math.ceil(Math.log10(45 / this.zoom));
     ctx.font = '10px system-ui';
     for (let axis = 0; axis < 2; axis++) {
       const extent = axis ? w : h,
@@ -167,6 +197,19 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.fillStyle = '#b0c5ce';
     ctx.fillText('START', start.x + 10, start.y + 4);
     const current = project(state);
+    if (Number.isFinite(state.deviceHeading)) {
+      ctx.save();
+      ctx.translate(current.x, current.y);
+      ctx.rotate(radians(state.deviceHeading));
+      ctx.strokeStyle = '#e8ac61';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-6, -31, 12, 19);
+      ctx.beginPath();
+      ctx.moveTo(0, -35);
+      ctx.lineTo(0, -43);
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.save();
     ctx.translate(current.x, current.y);
     ctx.fillStyle = '#36c6ad22';
@@ -186,7 +229,7 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-    const scale = this.zoom >= 12 ? 5 : 20;
+    const scale = spacing * 5;
     ctx.strokeStyle = '#b3c8d0';
     ctx.beginPath();
     ctx.moveTo(w - 30 - scale * this.zoom, h - 35);
@@ -254,7 +297,11 @@ export class GoogleMapsRenderer extends IMapRenderer {
       return x;
     };
     const position = geo(s);
-    this.map.setCenter(position);
+    const bounds = new google.maps.LatLngBounds();
+    for (const p of s.trajectory) bounds.extend(geo(p));
+    bounds.extend(position);
+    this.map.fitBounds(bounds, 48);
+    if (this.map.getZoom() > 20) this.map.setZoom(20);
     add(
       new google.maps.Polyline({
         map: this.map,

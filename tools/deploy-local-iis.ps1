@@ -26,4 +26,7 @@ Start-Process -FilePath "$env:windir\System32\WindowsPowerShell\v1.0\powershell.
 $status = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
 if ($status.error) { throw $status.detail }
 $status
-Invoke-RestMethod 'https://sensor2.qsys.se/api/health'
+for ($attempt = 0; ; $attempt++) {
+    try { Invoke-RestMethod 'https://sensor2.qsys.se/api/health' -NoProxy; break }
+    catch { if ($attempt -ge 20) { throw }; Start-Sleep -Seconds 1 }
+}

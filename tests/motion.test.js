@@ -12,7 +12,7 @@ import {
   MotionClassifier,
 } from '../client/pipeline.js';
 import { demoSamples, validateRecording } from '../client/sources.js';
-import { meterMarkers } from '../client/maps.js';
+import { meterMarkers, fitTrajectory } from '../client/maps.js';
 import { benchmark } from '../client/benchmark.js';
 const id = 'test-session';
 function Observation(sequence, t, extras = {}) {
