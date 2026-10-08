@@ -77,6 +77,7 @@ try {
         $https.CertificateHash = $cert.GetCertHash()
         $https.CertificateStoreName = $store
         $original = $manager.Sites['Sensor'].Bindings | Where-Object { $_.Protocol -eq 'https' -and $_.EndPoint.Port -eq 443 } | Select-Object -First 1
+        $originalHost = ($original.BindingInformation -split ':')[-1]
         if ($original -and !$original.CertificateHash) {
             $original.CertificateHash = $cert.GetCertHash()
             $original.CertificateStoreName = $store
@@ -93,10 +94,12 @@ try {
     Start-Website -Name $name
     # IIS can remove the HTTP.sys SNI registration while updating an existing
     # binding. Ensure it exists after the site configuration has committed.
-    & netsh.exe http show sslcert "hostnameport=${hostname}:443" | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        & netsh.exe http add sslcert "hostnameport=${hostname}:443" "certhash=$thumb" "certstorename=$store" 'appid={4dc3e181-e14b-4a21-b022-59fc669b0914}' | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw 'HTTP.sys SNI registration failed' }
+    foreach ($certificateHost in @($hostname, $originalHost) | Where-Object { $_ } | Select-Object -Unique) {
+        & netsh.exe http show sslcert "hostnameport=${certificateHost}:443" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            & netsh.exe http add sslcert "hostnameport=${certificateHost}:443" "certhash=$thumb" "certstorename=$store" 'appid={4dc3e181-e14b-4a21-b022-59fc669b0914}' | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'HTTP.sys SNI registration failed' }
+        }
     }
     @{site=$name;url="https://$hostname";path=$target;data=$dataDir;certificate=$thumb;state=(Get-Website -Name $name).state} | ConvertTo-Json | Set-Content -LiteralPath $ResultPath -Encoding UTF8
 } catch {
