@@ -47,7 +47,7 @@ test('attitude corrects small gyro error immediately but rejects compass jumps',
   tracker.orient({ alpha: 130, beta: 90, gamma: 0 }, 0.2);
   assert.ok(Math.abs(tracker.state.deviceHeading + 20) < 1e-8);
 });
-test('first walking pulse counts without waiting for additional steps', () => {
+test('single vertical pulse is insufficient walking evidence', () => {
   const tracker = new WalkingTracker();
   for (let i = 0; i < 20; i++) {
     const t = i * 0.02,
@@ -60,8 +60,8 @@ test('first walking pulse counts without waiting for additional steps', () => {
       orientation: { alpha: 0, beta: 0, gamma: 0 },
     });
   }
-  assert.equal(tracker.state.steps, 1);
-  assert.equal(tracker.state.distance, 0.7);
+  assert.equal(tracker.state.steps, 0);
+  assert.equal(tracker.state.distance, 0);
 });
 test('travel-up rotation puts forward direction above and auto-fit includes rotated route', async () => {
   const { rotateToTravel, fitTrajectory } = await import('../client/maps.js');
@@ -104,4 +104,40 @@ test('step detector rejects short spikes and threshold chatter', async () => {
     const peaks = values.flatMap((vertical, i) => d.update({ t: i * 0.02, vertical }));
     assert.equal(peaks.length, 0);
   }
+});
+test('periodic vertical phone lifting does not draw walking', () => {
+  const tracker = new WalkingTracker();
+  for (let i = 0; i < 500; i++) {
+    const t = i / 50,
+      v = 2 * Math.sin(2 * Math.PI * 1.8 * t);
+    tracker.process({
+      t,
+      gravityAcceleration: [0, 0, 9.80665 + v],
+      linearAcceleration: [0, 0, v],
+      gyro: [0, 0, 0],
+      orientation: { alpha: 0, beta: 0, gamma: 0 },
+    });
+  }
+  assert.equal(tracker.state.steps, 0);
+  assert.equal(tracker.state.distance, 0);
+});
+test('first confirmed walking steps preserve original headings', () => {
+  const tracker = new WalkingTracker();
+  for (let i = 0; i < 100; i++) {
+    const t = i / 50,
+      v = 2 * Math.sin(2 * Math.PI * 1.8 * t);
+    tracker.process({
+      t,
+      gravityAcceleration: [0.4 * Math.sin(2 * Math.PI * 1.8 * t), 0, 9.80665 + v],
+      linearAcceleration: [0.4 * Math.sin(2 * Math.PI * 1.8 * t), 0, v],
+      gyro: [0, 0, t < 1 ? 45 : 0],
+      orientation: { alpha: Math.min(t, 1) * 45, beta: 0, gamma: 0 },
+    });
+  }
+  assert.ok(tracker.state.steps >= 3);
+  const p = tracker.state.trajectory;
+  assert.ok(p[1].t < 1);
+  const initial = Math.atan2(p[1].x, p[1].y);
+  const last = Math.atan2(p.at(-1).x - p.at(-2).x, p.at(-1).y - p.at(-2).y);
+  assert.ok(Math.abs(initial - last) > 0.2);
 });
