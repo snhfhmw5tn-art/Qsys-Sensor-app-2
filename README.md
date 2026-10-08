@@ -21,3 +21,5 @@ Node.js 22 eller senare. Kör `npm install`, `npm run build`, `npm start` och ö
 ## Sensorhistorik
 
 Under Felsökning finns Exportera all sensorhistorik och Markera avvikelse. JSON-filen innehåller rådata, separata orienteringshändelser, beräknade riktningar och gångfunktioner, steg, kalibrering, båda spåren, sensorstatus, commitversion och aktuell kartbild. Även tidigare kartor och kalibrering från samma sidbesök ingår. Exportera innan omladdning; historiken ligger i minnet. Ingen automatisk uppladdning sker.
+
+Knappen Spara till fil på servern vid kartan sparar hela sidbesökets sensorhistorik och aktuell kartbild i DATA_DIR/sensor-history. Ange ett testnamn, t.ex. gangkarta-uppratt-telefon. Filens nedladdningsnamn får Stockholm-datum, klockslag och ett unikt suffix. En svårgissad nedladdningslänk returneras; ingen offentlig fillista finns. Max 25 MB per uppladdning. Vid större filer finns lokal export. Backendändringar publiceras med publish-client-iis.ps1 -IncludeServer, vilket återstartar app-poolen och bevarar IIS-bindningar.

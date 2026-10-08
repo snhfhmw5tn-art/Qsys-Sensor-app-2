@@ -38,6 +38,35 @@ test('TestThat_http_retry_atomicity_auth_and_restart_preserve_state', async () =
   }
   try {
     await Start();
+    const historyPayload = {
+      format: 'qsys-sensor-history',
+      version: 1,
+      description: 'gangkarta-uppratt',
+      segments: [{ history: { samples: [{ t: 1, gyro: [1, 2, 3] }] } }],
+    };
+    const upload = await fetch(base + '/api/sensor-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(historyPayload),
+    });
+    assert.equal(upload.status, 201);
+    const savedHistory = await upload.json();
+    assert.match(
+      savedHistory.filename,
+      /sensorhistorik-gangkarta-uppratt-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-[a-f0-9]{8}\.json/,
+    );
+    const invalid = await fetch(base + '/api/sensor-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(invalid.status, 400);
+    const cross = await fetch(base + '/api/sensor-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'cross-site' },
+      body: JSON.stringify(historyPayload),
+    });
+    assert.equal(cross.status, 403);
     const session = await (await fetch(base + '/api/sessions', { method: 'POST' })).json();
     const headers = {
       'Content-Type': 'application/json',
@@ -96,6 +125,10 @@ test('TestThat_http_retry_atomicity_auth_and_restart_preserve_state', async () =
     assert.equal(calibration.status, 400);
     await Stop();
     await Start();
+    const stored = await fetch(base + savedHistory.downloadUrl);
+    assert.equal(stored.status, 200);
+    assert.ok(stored.headers.get('content-disposition').includes(savedHistory.filename));
+    assert.deepEqual((await stored.json()).segments, historyPayload.segments);
     const restored = await (await fetch(`${base}/api/sessions/${session.id}`, { headers })).json();
     assert.equal(restored.totalDistance, initial.state.totalDistance);
     assert.equal(restored.lastSequence, 1);

@@ -60,6 +60,13 @@
         <canvas id="map" aria-label="Gångspår med telefonens riktning"></canvas
         ><span class="map-label">STARTENS RIKTNING ↑ · METER</span>
       </div>
+      <div class="controls" style="margin-top: 12px">
+        <label
+          >Namn på testet
+          <input id="historyName" value="gangkarta-uppratt-telefon" maxlength="60" /></label
+        ><button id="saveServer">Spara till fil på servern</button>
+      </div>
+      <p><a id="savedFile" hidden download></a></p>
       <div class="map-options">
         <label><input id="autoZoom" type="checkbox" checked /> Autozoom – visa hela spåret</label
         ><span

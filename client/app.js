@@ -153,7 +153,7 @@ $('markDeviation').onclick = () => {
   markers.push({ at: new Date().toISOString(), segment: segments.length, t: tracker.state.t ?? 0 });
   message('Avvikelse tidsmarkerad i historiken.');
 };
-$('exportHistory').onclick = () => {
+function historyPayload() {
   render();
   const data = {
     format: 'qsys-sensor-history',
@@ -185,6 +185,10 @@ $('exportHistory').onclick = () => {
     },
     mapImage: $('map').toDataURL('image/png'),
   };
+  return data;
+}
+$('exportHistory').onclick = () => {
+  const data = historyPayload();
   const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
   const a = document.createElement('a');
   a.href = url;
@@ -192,6 +196,38 @@ $('exportHistory').onclick = () => {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   message('Historiken är exporterad. Bifoga JSON-filen här för felsökning.');
+};
+$('saveServer').onclick = async () => {
+  const button = $('saveServer');
+  button.disabled = true;
+  message('Sparar sensorhistoriken på servern…');
+  try {
+    const data = historyPayload();
+    data.description = $('historyName').value.trim() || 'gangkarta';
+    const response = await fetch('/api/sensor-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok)
+      throw new Error(
+        response.status === 413
+          ? 'Historiken är för stor för servern (max 25 MB). Använd lokal export.'
+          : 'Servern kunde inte spara filen (' + response.status + ').',
+      );
+    const saved = await response.json();
+    const link = $('savedFile');
+    link.href = saved.downloadUrl;
+    link.textContent = saved.filename;
+    link.hidden = false;
+    message(
+      'Filen är sparad på servern. Klicka på filnamnet för att hämta den och bifoga den här.',
+    );
+  } catch (error) {
+    message(error.message);
+  } finally {
+    button.disabled = false;
+  }
 };
 $('autoZoom').onchange = () => {
   map.follow = $('autoZoom').checked;

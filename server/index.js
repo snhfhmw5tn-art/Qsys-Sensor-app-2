@@ -39,12 +39,12 @@ const types = {
   '.json': 'application/json',
   '.svg': 'image/svg+xml',
 };
-async function body(req) {
+async function body(req, limit = C.maxBodyBytes) {
   let size = 0,
     chunks = [];
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > C.maxBodyBytes) {
+    if (size > limit) {
       const e = new Error('Request too large');
       e.status = 413;
       throw e;
@@ -85,6 +85,81 @@ async function handler(req, res) {
     const url = new URL(req.url, 'http://localhost');
     if (req.method === 'GET' && url.pathname === '/api/health')
       return json(res, 200, { ok: true, algorithmVersion: C.version });
+    if (req.method === 'POST' && url.pathname === '/api/sensor-history') {
+      if (req.headers['sec-fetch-site'] === 'cross-site')
+        return json(res, 403, { error: 'Cross-site upload denied' });
+      if (!req.headers['content-type']?.startsWith('application/json'))
+        return json(res, 415, { error: 'JSON required' });
+      const payload = await body(req, 25 * 1024 * 1024);
+      if (
+        payload.format !== 'qsys-sensor-history' ||
+        payload.version !== 1 ||
+        !Array.isArray(payload.segments) ||
+        payload.segments.length > 1000
+      )
+        return json(res, 400, { error: 'Invalid sensor history' });
+      const description =
+        String(payload.description ?? 'gangkarta')
+          .normalize('NFKD')
+          .replace(/[^a-zA-Z0-9 _-]/g, '')
+          .trim()
+          .replace(/ +/g, '-')
+          .slice(0, 60) || 'gangkarta';
+      const savedAt = new Date().toISOString();
+      const parts = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Europe/Stockholm',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(new Date(savedAt));
+      const part = (type) => parts.find((p) => p.type === type).value;
+      const id = randomBytes(24).toString('hex');
+      const filename =
+        'sensorhistorik-' +
+        description +
+        '-' +
+        part('year') +
+        '-' +
+        part('month') +
+        '-' +
+        part('day') +
+        '_' +
+        part('hour') +
+        '-' +
+        part('minute') +
+        '-' +
+        part('second') +
+        '-' +
+        id.slice(0, 8) +
+        '.json';
+      const directory = path.join(data, 'sensor-history');
+      await mkdir(directory, { recursive: true });
+      const saved = { ...payload, serverFile: { filename, savedAt, timeZone: 'Europe/Stockholm' } };
+      await writeFile(path.join(directory, id + '--' + filename), JSON.stringify(saved), {
+        flag: 'wx',
+      });
+      return json(res, 201, { filename, savedAt, downloadUrl: '/api/sensor-history/' + id });
+    }
+    const historyMatch = url.pathname.match(/^\/api\/sensor-history\/([a-f0-9]{48})$/);
+    if (req.method === 'GET' && historyMatch) {
+      const directory = path.join(data, 'sensor-history');
+      const name = (await readdir(directory)).find((name) =>
+        name.startsWith(historyMatch[1] + '--'),
+      );
+      if (!name) return json(res, 404, { error: 'History not found' });
+      const bytes = await readFile(path.join(directory, name));
+      const saved = JSON.parse(bytes);
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Content-Disposition': 'attachment; filename="' + saved.serverFile.filename + '"',
+        'Cache-Control': 'no-store',
+      });
+      return res.end(bytes);
+    }
     if (req.method === 'POST' && url.pathname === '/api/sessions') {
       if (sessions.size >= 2000) return json(res, 503, { error: 'Session capacity reached' });
       const id = randomUUID(),
