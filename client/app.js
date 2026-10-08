@@ -1,16 +1,9 @@
 import { config as C } from '../shared/config.js';
 import { WalkingTracker } from './walking.js';
-import { LiveSensorSource, compassLabel } from './sources.js';
+import { LiveSensorSource } from './sources.js';
 import { LocalMapRenderer, orangeMarker } from './maps.js';
 const $ = (id) => document.getElementById(id);
-let adjustmentWindowMs = 700;
-let compass = null;
-let gyroHeading = 0,
-  gyroTime = null,
-  gyroAvailable = false,
-  accelerationG = null;
-const compassEvents = [];
-let tracker = new WalkingTracker({ stepLength: 0.76, adjustmentWindowMs }),
+let tracker = new WalkingTracker({ stepLength: 0.76 }),
   calibratedLength = 0.76,
   calibrating = false,
   calibrationMeters = 0,
@@ -39,36 +32,6 @@ function archiveSegment(nextPhase) {
 const map = new LocalMapRenderer($('map'));
 function render() {
   const s = tracker.state;
-  $('directionArrow').setAttribute('transform', 'rotate(' + (compass?.heading ?? 0) + ' 110 110)');
-  $('directionArrow').style.display = compass ? '' : 'none';
-  $('compassValue').textContent = compass ? compassLabel(compass.heading) : 'Data saknas';
-  $('phoneArrow').setAttribute('transform', 'rotate(' + s.deviceHeading + ' 110 110)');
-  $('phoneValue').textContent = Math.round(s.deviceHeading) + '° från start';
-  $('travelArrow').setAttribute('transform', 'rotate(' + s.heading + ' 110 110)');
-  $('travelArrow').setAttribute(
-    'stroke-dasharray',
-    s.directionQuality === 'supported' ? 'none' : '5 4',
-  );
-  $('travelValue').textContent =
-    Math.round(s.heading) +
-    '° från start' +
-    (s.directionQuality === 'supported' ? '' : ' · osäker');
-
-  $('gyroArrow').setAttribute('transform', 'rotate(' + gyroHeading + ' 110 110)');
-  $('gyroArrow').style.display = gyroAvailable ? '' : 'none';
-  $('gyroValue').textContent = gyroAvailable
-    ? Math.round(gyroHeading) + '° från start'
-    : 'Data saknas';
-  $('accelDot').style.display = accelerationG ? '' : 'none';
-  if (accelerationG) {
-    const [x, y, z] = accelerationG;
-    const radius = Math.hypot(x, y),
-      scale = radius > 2 ? 2 / radius : 1;
-    $('accelDot').setAttribute('cx', 110 + x * scale * 40);
-    $('accelDot').setAttribute('cy', 110 - y * scale * 40);
-    $('accelValue').textContent =
-      'X ' + x.toFixed(2) + ' · Y ' + y.toFixed(2) + ' · Z ' + z.toFixed(2) + ' g';
-  } else $('accelValue').textContent = 'Data saknas';
   map.render({ ...s, markers: markers.filter((m) => m.segment === segments.length) });
   $('markDeviation').disabled = !tracker.drawing;
   $('distance').textContent = s.distance.toLocaleString('sv-SE', {
@@ -77,10 +40,6 @@ function render() {
   });
   $('steps').textContent = s.steps;
   $('heading').textContent = Math.round(s.heading) + '°';
-  $('directionQuality').textContent =
-    s.directionQuality === 'supported'
-      ? 'Färdriktning: stöds av gångmönstret'
-      : 'Färdriktning: osäker – inväntar gångmönster';
   $('calibrationSteps').textContent = calibrating ? s.steps : 0;
   $('finishCalibration').disabled = !calibrating || !s.steps;
 }
@@ -105,14 +64,6 @@ async function connectSensors() {
       sampleOrigin ??= sample.t;
       sample = { ...sample, sourceT: sample.t, t: sample.t - sampleOrigin };
       tracker.process(sample);
-      const rate = tracker.history.at(-1)?.yawRate;
-      gyroAvailable = Array.isArray(sample.gyro) && Number.isFinite(rate);
-      if (gyroAvailable && gyroTime !== null) {
-        const dt = sample.t - gyroTime;
-        if (dt > 0 && dt <= 0.5) gyroHeading = ((gyroHeading - rate * dt + 540) % 360) - 180;
-      }
-      gyroTime = sample.t;
-      accelerationG = sample.gravityAcceleration?.map((v) => v / C.gravity) ?? null;
       scheduleRender();
     },
     () => {},
@@ -129,16 +80,6 @@ async function connectSensors() {
     (orientation, t) => {
       sampleOrigin ??= t;
       tracker.orient(orientation, t - sampleOrigin);
-      scheduleRender();
-    },
-    (reading, t) => {
-      compass = reading;
-      compassEvents.push({
-        at: new Date().toISOString(),
-        sourceT: t,
-        segment: segments.length,
-        ...(reading ?? { heading: null, status: 'stale' }),
-      });
       scheduleRender();
     },
   );
@@ -160,54 +101,14 @@ async function connectSensors() {
   }
 }
 $('permission').onclick = connectSensors;
-function selectView(reference) {
-  $('referenceView').hidden = !reference;
-  document.body.classList.toggle('reference-mode', reference);
-  $('mapView').hidden = reference;
-  $('showMap').setAttribute('aria-pressed', String(!reference));
-  $('showReference').setAttribute('aria-pressed', String(reference));
-  render();
-}
-$('showMap').onclick = () => selectView(false);
-$('showReference').onclick = () => selectView(true);
 function captureMapImage() {
-  const hidden = $('mapView').hidden;
-  $('mapView').hidden = false;
-  try {
-    map.render({ ...tracker.state, markers: markers.filter((m) => m.segment === segments.length) });
-    return $('map').toDataURL('image/png');
-  } finally {
-    $('mapView').hidden = hidden;
-  }
+  map.render({ ...tracker.state, markers: markers.filter((m) => m.segment === segments.length) });
+  return $('map').toDataURL('image/png');
 }
-$('adjustmentWindow').onchange = () => {
-  const input = $('adjustmentWindow');
-  const value = Number(input.value);
-  if (!Number.isFinite(value) || value < 400 || value > 5000) {
-    input.value = adjustmentWindowMs;
-    message('Ange ett analysfönster mellan 400 och 5000 ms.');
-    return;
-  }
-  adjustmentWindowMs = value;
-  tracker.travel.setAdjustmentWindow(value);
-  statusEvents.push({
-    at: new Date().toISOString(),
-    type: 'analysis-window',
-    adjustmentWindowMs: value,
-    segment: segments.length,
-    t: tracker.state.t ?? 0,
-  });
-  message('Analysfönster: ' + value + ' ms.');
-};
 $('reset').onclick = () => {
   segments.length = 0;
   statusEvents.length = 0;
   markers.length = 0;
-  gyroHeading = 0;
-  gyroTime = null;
-  gyroAvailable = false;
-  accelerationG = null;
-  compassEvents.length = 0;
   historyStartedAt = new Date().toISOString();
   phase = calibratedLength !== null ? 'walking' : 'waiting';
   $('savedFile').hidden = true;
@@ -215,7 +116,6 @@ $('reset').onclick = () => {
   $('savedFile').textContent = '';
   tracker = new WalkingTracker({
     stepLength: calibratedLength ?? 0.76,
-    adjustmentWindowMs,
     drawing: calibratedLength !== null,
   });
   calibrating = false;
@@ -241,7 +141,7 @@ $('beginCalibration').onclick = () => {
   archiveSegment('calibration');
   calibrationMeters = meters;
   calibrating = true;
-  tracker = new WalkingTracker({ drawing: false, adjustmentWindowMs });
+  tracker = new WalkingTracker({ drawing: false });
   sampleOrigin = null;
   $('beginCalibration').disabled = true;
   $('calibrationMeters').disabled = true;
@@ -255,7 +155,7 @@ $('finishCalibration').onclick = () => {
   $('stride').textContent =
     calibratedLength.toLocaleString('sv-SE', { maximumFractionDigits: 3 }) + ' m/steg';
   calibrating = false;
-  tracker = new WalkingTracker({ stepLength: calibratedLength, adjustmentWindowMs });
+  tracker = new WalkingTracker({ stepLength: calibratedLength });
   sampleOrigin = null;
   $('beginCalibration').disabled = false;
   $('calibrationMeters').disabled = false;
@@ -280,12 +180,10 @@ function historyPayload() {
     build,
     configuration: C,
     calibratedStepLength: calibratedLength,
-    adjustmentWindowMs,
     environment: { userAgent: navigator.userAgent, secureContext: globalThis.isSecureContext },
     statuses,
     statusEvents,
     markers,
-    compass: { current: compass, events: compassEvents },
     segments: [
       ...segments,
       {

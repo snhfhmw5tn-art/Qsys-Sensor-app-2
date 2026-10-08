@@ -7,13 +7,12 @@ import {
 } from './pipeline.js';
 import { radians, wrap, config as C } from '../shared/config.js';
 export class WalkingTracker {
-  constructor({ stepLength = 0.7, drawing = true, adjustmentWindowMs = 700 } = {}) {
+  constructor({ stepLength = 0.7, drawing = true } = {}) {
     this.stepLength = stepLength;
     this.drawing = drawing;
     this.preprocessor = new SensorPreprocessor();
     this.detector = new GaitStepDetector();
     this.heading = new HeadingEstimator();
-    this.travel = new TravelDirection(adjustmentWindowMs);
     this.attitude = new HeadingEstimator();
     this.attitudeOffset = null;
     this.history = [];
@@ -46,30 +45,6 @@ export class WalkingTracker {
       this.history.push({ t, phoneHeading: target });
     }
   }
-  correctGreenRoute() {
-    const c = this.travel.correction;
-    if (!c || !this.drawing) return;
-    for (const row of this.history) {
-      if (row.t >= c.start && row.t <= c.end && row.travelHeading !== undefined && c.headings)
-        row.travelHeading = interpolateHeading(c.headings, row.t);
-    }
-    let x = 0,
-      y = 0;
-    for (let i = 1; i < this.state.trajectory.length; i++) {
-      const p = this.state.trajectory[i];
-      if (p.t >= c.start && p.t <= c.end)
-        p.travelHeading = c.headings
-          ? interpolateHeading(c.headings, p.t)
-          : wrap(c.baseHeading + wrap(p.phoneHeading - c.basePhone));
-      x += this.stepLength * Math.sin(radians(p.travelHeading));
-      y += this.stepLength * Math.cos(radians(p.travelHeading));
-      p.x = x;
-      p.y = y;
-    }
-    this.state.x = x;
-    this.state.y = y;
-    this.travel.correction = null;
-  }
   exportHistory() {
     return {
       stepLength: this.stepLength,
@@ -78,25 +53,12 @@ export class WalkingTracker {
       orientationEvents: this.orientations,
       derived: this.history,
       state: this.state,
-      greenDirection: {
-        confidence: this.travel.confidence,
-        model: 'navigation-frame-gait-fixed-origin',
-        adjustmentWindowMs: this.travel.adjustmentWindowMs,
-        mountingOffset: this.travel.offset,
-        diagnostics: this.travel.diagnostics(this.heading.deviceYaw),
-        referenceChanges: this.travel.referenceChanges,
-        directionReferences: this.travel.directionReferences,
-        reference: this.travel.reference,
-        turn: this.travel.turn,
-        corrections: this.travel.corrections,
-      },
     };
   }
   process(raw) {
     if (this.previous !== undefined && raw.t - this.previous > C.maximumSampleGap) {
       this.detector = new GaitStepDetector();
       this.preprocessor.previous = null;
-      this.travel.resetEvidence();
     }
     this.previous = raw.t;
     this.hasGyro = Array.isArray(raw.gyro);
@@ -104,13 +66,9 @@ export class WalkingTracker {
     const s = this.preprocessor.process(raw);
     this.heading.update(s, null, 'Standing');
     const peaks = this.detector.update(s);
-    this.travel.update(this.detector.features, this.heading.deviceYaw, s.t, s, peaks);
     this.history.push({
       t: s.t,
       phoneHeading: this.heading.deviceYaw,
-      travelHeading: this.travel.heading,
-      travelConfidence: this.travel.confidence,
-      directionAnalysis: this.travel.diagnostics(this.heading.deviceYaw),
       orientationHeading: this.heading.orientationYaw,
       yawRate: s.yawRate,
       vertical: s.vertical,
@@ -120,14 +78,11 @@ export class WalkingTracker {
       confirmedSteps: peaks.map((p) => p.t),
     });
     for (const peak of peaks) {
-      const atStep = this.history.findLast((p) => p.t <= peak.t && p.travelHeading !== undefined);
+      const atStep = this.history.findLast((p) => p.t <= peak.t && p.nav !== undefined);
       const phone = atStep?.phoneHeading ?? this.heading.deviceYaw;
-      const h = atStep?.travelHeading ?? this.travel.heading;
       this.state.steps++;
       if (!this.drawing) continue;
       const length = this.stepLength;
-      this.state.x += length * Math.sin(radians(h));
-      this.state.y += length * Math.cos(radians(h));
       this.state.phoneX += length * Math.sin(radians(phone));
       this.state.phoneY += length * Math.cos(radians(phone));
       this.state.distance += length;
@@ -138,19 +93,11 @@ export class WalkingTracker {
         distance: this.state.distance,
         kind: 'movement',
       });
-      this.state.trajectory.push({
-        x: this.state.x,
-        y: this.state.y,
-        t: peak.t,
-        distance: this.state.distance,
-        kind: 'movement',
-        travelHeading: h,
-        phoneHeading: phone,
-      });
     }
-    this.correctGreenRoute();
-    this.state.directionQuality = this.travel.confidence >= 0.6 ? 'supported' : 'uncertain';
-    this.state.heading = this.travel.heading;
+    this.state.x = this.state.phoneX;
+    this.state.y = this.state.phoneY;
+    this.state.trajectory = this.state.phoneTrajectory;
+    this.state.heading = this.heading.deviceYaw;
     this.state.deviceHeading = this.heading.deviceYaw;
     this.state.t = s.t;
     return this.state;
@@ -233,289 +180,5 @@ export class GaitStepDetector {
     const result = recent.filter((p) => p.t > this.lastApplied);
     if (result.length) this.lastApplied = result.at(-1).t;
     return result;
-  }
-}
-
-const axial = (value) => wrap(value * 2) / 2;
-function axisMean(points) {
-  const x = points.reduce((v, p) => v + Math.cos(radians(p.axis * 2)), 0),
-    y = points.reduce((v, p) => v + Math.sin(radians(p.axis * 2)), 0);
-  return { axis: (Math.atan2(y, x) * 90) / Math.PI, agreement: Math.hypot(x, y) / points.length };
-}
-export function interpolateHeading(points, t) {
-  const b = points.find((p) => p.t >= t) ?? points.at(-1),
-    a = points.findLast((p) => p.t <= t) ?? points[0];
-  return wrap(
-    a.heading +
-      wrap(b.heading - a.heading) *
-        (b.t === a.t ? 0 : Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t)))),
-  );
-}
-// Gait is measured in navigation coordinates; phone yaw never drives travel.
-export class TravelDirection {
-  constructor(adjustmentWindowMs = 700) {
-    this.heading = 0;
-    this.time = 0;
-    this.offset = 0;
-    this.confidence = 0.2;
-    this.reference = null;
-    this.corrections = [];
-    this.turn = null;
-    this.path = [];
-    this.zeroOffset = 0;
-    this.referenceChanges = [];
-    this.analysisState = 'waiting';
-    this.candidate = null;
-    this.lastConfirmedAt = null;
-    this.referencePendingSince = null;
-    this.confirmationCount = 0;
-    this.directionCandidate = null;
-    this.confirmedFootfalls = [];
-    this.directionReferences = [];
-    this.setAdjustmentWindow(adjustmentWindowMs);
-  }
-  diagnostics(phone = 0) {
-    const span = this.evidence.length > 1 ? this.evidence.at(-1).t - this.evidence[0].t : 0;
-    const required = (this.adjustmentWindowMs - 200) / 1000;
-    return {
-      state: this.analysisState,
-      pendingSince: this.referencePendingSince,
-      directionCandidate: this.directionCandidate,
-      directionReference: this.reference,
-      windowMs: this.adjustmentWindowMs,
-      checkIntervalMs: 100,
-      confirmationCount: this.confirmationCount,
-      progress:
-        this.analysisState === 'confirmed'
-          ? 1
-          : Math.min(1, span / required, this.evidence.length / 4),
-      zeroReferenceRelativePhone: wrap(-this.zeroOffset),
-      calculatedRelativePhone: this.candidate === null ? null : wrap(this.candidate - phone),
-      acceptedHeading: this.heading,
-      candidateHeading: this.candidate,
-      zeroOffset: this.zeroOffset,
-      lastConfirmedAt: this.lastConfirmedAt,
-      lastReferenceChange: this.referenceChanges.at(-1) ?? null,
-      confidence: this.confidence,
-      evidenceCount: this.evidence.length,
-    };
-  }
-  setAdjustmentWindow(ms) {
-    if (!Number.isFinite(ms) || ms < 400 || ms > 5000)
-      throw new RangeError('Analysis window must be between 400 and 5000 ms');
-    this.adjustmentWindowMs = ms;
-    this.evidence = [];
-    this.last = null;
-    this.analysisState = 'collecting';
-  }
-  resetEvidence() {
-    // Preserve the map origin and last direction across a sensor dropout.
-    this.evidence = [];
-    this.previousAxis = null;
-    this.last = null;
-    this.analysisState = 'waiting';
-    this.candidate = null;
-    this.confidence = 0.2;
-  }
-  update(f, phone, t = this.time + 0.1, sample, footfalls = []) {
-    this.confirmedFootfalls.push(...footfalls.map((p) => p.t));
-    this.confirmedFootfalls = this.confirmedFootfalls.filter((at) => at >= t - 2);
-    this.time = t;
-    this.offset = wrap(phone - this.heading);
-    if (
-      this.reference &&
-      this.referencePendingSince === null &&
-      Math.abs(wrap(this.offset - this.zeroOffset)) > 10
-    ) {
-      this.referencePendingSince = t;
-      // Keep the rolling gait evidence throughout a multi-second turn.
-      this.analysisState = 'collecting';
-    }
-    if (!f || f === this.last) return this.heading;
-    this.last = f;
-    const reliable =
-      f.orientationReliable &&
-      f.periodicity >= 0.48 &&
-      f.anisotropy >= 0.4 &&
-      f.horizontalEnergy >= 0.012;
-    if (!reliable) {
-      this.directionCandidate = null;
-      this.turn = null;
-      this.analysisState = 'weak';
-      this.candidate = null;
-      this.evidence = this.evidence.filter((p) => p.t >= t - this.adjustmentWindowMs / 1000);
-      this.confidence = 0.2;
-      return this.heading;
-    }
-    const axis = axial(f.pcaHeading);
-    if (this.previousAxis == null) {
-      this.unwrappedAxis = this.reference
-        ? this.reference.axis + wrap(this.heading - this.reference.heading)
-        : axis;
-      this.unwrappedAxis += axial(axis - this.unwrappedAxis);
-    } else {
-      const delta = axial(axis - this.previousAxis);
-      // Reject discontinuous PCA flips rather than turning them into a body turn.
-      if (Math.abs(delta) > 40) {
-        this.evidence = [];
-        this.analysisState = 'rejected';
-        this.candidate = null;
-        this.previousAxis = axis;
-        this.confidence = 0.2;
-        return this.heading;
-      }
-      this.unwrappedAxis += delta;
-    }
-    this.previousAxis = axis;
-    this.evidence.push({ t, axis, unwrapped: this.unwrappedAxis });
-    this.evidence = this.evidence.filter((p) => p.t >= t - this.adjustmentWindowMs / 1000);
-    const mean = axisMean(this.evidence);
-    const average = this.evidence.reduce((sum, p) => sum + p.unwrapped, 0) / this.evidence.length;
-    const center = this.evidence.reduce((sum, p) => sum + p.t, 0) / this.evidence.length;
-    const variance = this.evidence.reduce((sum, p) => sum + (p.t - center) ** 2, 0);
-    const slope =
-      variance > 0
-        ? this.evidence.reduce((sum, p) => sum + (p.t - center) * (p.unwrapped - average), 0) /
-          variance
-        : 0;
-    const residual = Math.sqrt(
-      this.evidence.reduce(
-        (sum, p) => sum + (p.unwrapped - average - slope * (p.t - center)) ** 2,
-        0,
-      ) / this.evidence.length,
-    );
-    // A smooth changing axis is useful evidence during a turn, even when it is
-    // not constant. Use its current fitted value rather than the window midpoint.
-    const coherentTurn = this.reference && residual < 8 && Math.abs(slope) <= 160;
-    const estimate = coherentTurn ? average + slope * (t - center) : average;
-    this.candidate = this.reference
-      ? wrap(this.reference.heading + estimate - this.reference.axis)
-      : null;
-    const requiredSpan = this.reference
-      ? Math.min(0.25, (this.adjustmentWindowMs - 200) / 1000)
-      : (this.adjustmentWindowMs - 200) / 1000;
-    const stable =
-      this.evidence.length >= 4 &&
-      t - this.evidence[0].t >= requiredSpan &&
-      (mean.agreement > 0.94 || coherentTurn);
-    if (!stable) {
-      this.analysisState = 'collecting';
-      this.confidence = 0.2;
-      return this.heading;
-    }
-    this.analysisState = 'confirmed';
-    if (!this.reference) {
-      this.lastConfirmedAt = t;
-      this.confirmationCount++;
-      this.referencePendingSince = null;
-      this.reference = { axis: average, heading: 0, t };
-      this.path = [{ t, heading: 0 }];
-      this.candidate = 0;
-      this.zeroOffset = wrap(phone);
-      this.referenceChanges.push({
-        t,
-        zeroOffset: this.zeroOffset,
-        heading: 0,
-        phone,
-        reason: 'initial-gait',
-      });
-      this.confidence = 0.6;
-      return this.heading;
-    }
-    const target = wrap(this.reference.heading + estimate - this.reference.axis);
-    if (Math.abs(wrap(target - this.reference.heading)) <= 2) this.directionCandidate = null;
-    if (sample && !this.turn && Math.abs(wrap(target - this.reference.heading)) > 2) {
-      this.directionCandidate ??= { start: t, heading: target };
-      this.directionCandidate.heading = target;
-      const supporting = this.confirmedFootfalls.filter(
-        (at) => at >= this.directionCandidate.start - 0.3,
-      );
-      if (
-        t - this.directionCandidate.start < 0.35 ||
-        supporting.length < 2 ||
-        supporting.at(-1) - supporting[0] < 0.25
-      ) {
-        this.analysisState = 'collecting';
-        this.confidence = 0.2;
-        return this.heading;
-      }
-      this.turn = {
-        start: this.directionCandidate.start,
-        confirmedAt: t,
-        baseHeading: this.reference.heading,
-        lastSupportedAt: t,
-        settledSince: null,
-      };
-      this.directionReferences.push({
-        t,
-        axis: estimate,
-        heading: target,
-        persistentSince: this.directionCandidate.start,
-        footfalls: [...supporting],
-        reason: 'turn-start',
-        gyroYawRate: sample.yawRate ?? null,
-      });
-      this.directionCandidate = null;
-    }
-    if (sample && this.turn) {
-      const lastStep = this.confirmedFootfalls.at(-1);
-      if (lastStep === undefined || t - lastStep > 1.2) {
-        this.turn = null;
-        this.analysisState = 'collecting';
-        this.confidence = 0.2;
-        return this.heading;
-      }
-      this.turn.lastSupportedAt = lastStep;
-      this.turn.gyroYawRate = sample.yawRate ?? null;
-      // Once sustained gait confirms a turn, follow it continuously instead of
-      // requiring a fresh two-step confirmation for every subsequent angle.
-      if (Math.abs(slope) < 5 && residual < 8) this.turn.settledSince ??= t;
-      else this.turn.settledSince = null;
-      if (this.turn.settledSince !== null && t - this.turn.settledSince >= 0.5) {
-        this.reference = { axis: estimate, heading: target, t };
-        this.directionReferences.push({
-          t,
-          axis: estimate,
-          heading: target,
-          persistentSince: this.turn.start,
-          reason: 'turn-complete',
-          gyroYawRate: sample.yawRate ?? null,
-        });
-        this.turn = null;
-      }
-    }
-
-    this.lastConfirmedAt = t;
-    this.confirmationCount++;
-    this.referencePendingSince = null;
-    if (Math.abs(wrap(target - this.heading)) > 2) this.heading = target;
-    this.offset = wrap(phone - this.heading);
-    if (Math.abs(wrap(this.offset - this.zeroOffset)) > 2) {
-      this.zeroOffset = this.offset;
-      this.referenceChanges.push({
-        t,
-        zeroOffset: this.zeroOffset,
-        heading: this.heading,
-        phone,
-        reason: this.turn ? 'turn-following' : 'mounting-reference',
-      });
-    }
-    this.confidence = 0.6;
-    // Feature extraction and the confirmation window lag the actual footfalls.
-    const lag = coherentTurn ? 0.6 : 0.6 + this.adjustmentWindowMs / 2000;
-    const point = { t: Math.max(this.path[0].t, t - lag), heading: this.heading };
-    const prior = this.path.at(-1);
-    if (point.t > prior.t) {
-      this.path.push(point);
-      const correction = {
-        start: prior.t,
-        end: t,
-        reason: 'navigation-gait',
-        headings: [prior, point, { t, heading: this.heading }],
-      };
-      this.correction = correction;
-      if (Math.abs(wrap(point.heading - prior.heading)) > 2) this.corrections.push(correction);
-    }
-    return this.heading;
   }
 }

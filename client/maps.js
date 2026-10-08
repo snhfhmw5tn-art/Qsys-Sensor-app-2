@@ -204,17 +204,6 @@ export class LocalMapRenderer extends IMapRenderer {
         ctx.fillRect(p.x, p.y, C.cellSize * this.zoom, C.cellSize * this.zoom);
       }
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = '#b594ff';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 3]);
-    ctx.beginPath();
-    (state.referenceTrajectory ?? []).forEach((p, i) => {
-      const q = project(p);
-      if (i) ctx.lineTo(q.x, q.y);
-      else ctx.moveTo(q.x, q.y);
-    });
-    ctx.stroke();
-    ctx.setLineDash([]);
     ctx.strokeStyle = '#e8ac61';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -224,26 +213,14 @@ export class LocalMapRenderer extends IMapRenderer {
       else ctx.moveTo(q.x, q.y);
     });
     ctx.stroke();
-    const trajectory = state.trajectory;
-    ctx.lineWidth = 2.5;
-    for (let i = 1; i < trajectory.length; i++) {
-      const a = project(trajectory[i - 1]),
-        b = project(trajectory[i]);
-      ctx.strokeStyle = trajectory[i].kind === 'correction' ? '#e8ac61' : '#4bd1bc';
-      ctx.setLineDash(trajectory[i].kind === 'correction' ? [3, 4] : []);
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
+    const trajectory = state.phoneTrajectory ?? state.trajectory;
     for (const marker of meterMarkers(trajectory, this.zoom >= 12 ? 5 : 20)) {
       const p = project(marker);
       ctx.beginPath();
-      ctx.fillStyle = '#92e4d4';
+      ctx.fillStyle = '#e8ac61';
       ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#d8eee9';
+      ctx.fillStyle = '#fff2db';
       ctx.fillText(`${marker.distance} m`, p.x + 7, p.y - 6);
     }
     const start = project({ x: 0, y: 0 });
@@ -254,7 +231,6 @@ export class LocalMapRenderer extends IMapRenderer {
     ctx.stroke();
     ctx.fillStyle = '#b0c5ce';
     ctx.fillText('START', start.x + 10, start.y + 4);
-    const current = project(state);
     if (Number.isFinite(state.deviceHeading)) {
       ctx.save();
       const phonePosition = project({ x: state.phoneX ?? state.x, y: state.phoneY ?? state.y });
@@ -269,25 +245,6 @@ export class LocalMapRenderer extends IMapRenderer {
       ctx.stroke();
       ctx.restore();
     }
-    ctx.save();
-    ctx.translate(current.x, current.y);
-    ctx.fillStyle = '#36c6ad22';
-    ctx.beginPath();
-    ctx.arc(0, 0, 26, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.rotate(radians(state.heading - viewHeading));
-    ctx.fillStyle = '#56e2c9';
-    ctx.strokeStyle = '#d5fff6';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(0, -14);
-    ctx.lineTo(9, 10);
-    ctx.lineTo(0, 6);
-    ctx.lineTo(-9, 10);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
     for (const marker of state.markers ?? []) {
       const p = project(marker);
       ctx.save();
