@@ -12,6 +12,12 @@ try {
     $dataDir = 'C:\ProgramData\Qsys\Sensor2\data'
     $sourceBinding = Get-WebBinding -Name Sensor -Protocol https | Where-Object { $_.bindingInformation -like '*:443:*' } | Select-Object -First 1
     if (!$sourceBinding) { throw 'Sensor has no HTTPS 443 binding' }
+    if (!$sourceBinding.certificateHash) {
+        # Recover the shared certificate after a previously interrupted binding
+        # update, using this destination site's existing certificate only.
+        $sourceBinding = Get-WebBinding -Name $name -Protocol https | Select-Object -First 1
+        if (!$sourceBinding.certificateHash) { throw 'Neither sensor site has a certificate binding' }
+    }
     $thumb = $sourceBinding.certificateHash
     if ($thumb -is [byte[]]) { $thumb = [BitConverter]::ToString($thumb).Replace('-','') }
     $store = $sourceBinding.certificateStoreName
@@ -70,6 +76,11 @@ try {
         $https.SslFlags = [Microsoft.Web.Administration.SslFlags]1
         $https.CertificateHash = $cert.GetCertHash()
         $https.CertificateStoreName = $store
+        $original = $manager.Sites['Sensor'].Bindings | Where-Object { $_.Protocol -eq 'https' -and $_.EndPoint.Port -eq 443 } | Select-Object -First 1
+        if ($original -and !$original.CertificateHash) {
+            $original.CertificateHash = $cert.GetCertHash()
+            $original.CertificateStoreName = $store
+        }
         $manager.CommitChanges()
     } finally { $manager.Dispose() }
     $hostsPath = "$env:windir\System32\drivers\etc\hosts"

@@ -127,10 +127,12 @@ test('TestThat_put_on_table_and_pick_up_do_not_translate', () => {
   }
   assert.equal(RunSamples(samples).s.totalDistance, 0);
 });
-test('TestThat_demo_confirms_buffered_gait_and_returns', () => {
+test('TestThat_demo_confirms_buffered_gait_and_turns', () => {
   const { s, p } = RunSamples(demoSamples());
   assert.ok(s.steps > 35, `only ${s.steps} steps`);
   assert.ok(s.totalDistance > 20);
+  assert.ok(Math.abs(s.heading) > 80, `turn missing: ${s.heading}`);
+  assert.ok(Math.abs(s.x) > 5 && Math.abs(s.y) > 5);
   assert.ok(p.events.some((x) => x.type === 'BufferedStepsApplied'));
   assert.ok(s.trajectory.some((x) => x.mode === 'Walking'));
 });

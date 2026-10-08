@@ -142,9 +142,9 @@ export function demoSamples() {
       t,
       gravityAcceleration: [walking ? 0.4 * Math.sin(2 * Math.PI * 1.8 * t) : 0, 0, 9.80665 + a],
       linearAcceleration: [walking ? 0.4 * Math.sin(2 * Math.PI * 1.8 * t) : 0, 0, a],
-      gyro: [0, 0, turn ? 45 : 0],
+      gyro: [0, 0, turn ? 22.5 : 0],
       orientation: {
-        alpha: turn ? (t - 19) * 45 : t >= 23 ? 180 : 0,
+        alpha: turn ? (t - 19) * 22.5 : t >= 23 ? 90 : 0,
         beta: 0,
         gamma: 0,
         absolute: false,

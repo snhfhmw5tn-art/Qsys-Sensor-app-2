@@ -14,7 +14,7 @@ public sealed class MotionTests
     [DataRow("portrait_and_landscape_start_at_zero_heading", DisplayName = "Screen orientation independent start")]
     [DataRow("isolated_shake_is_not_a_step", DisplayName = "Isolated shake")]
     [DataRow("put_on_table_and_pick_up_do_not_translate", DisplayName = "Table and pickup")]
-    [DataRow("demo_confirms_buffered_gait_and_returns", DisplayName = "Buffered walking start")]
+    [DataRow("demo_confirms_buffered_gait_and_turns", DisplayName = "Buffered walking start and corner")]
     [DataRow("replay_is_deterministic", DisplayName = "Same pipeline replay")]
     [DataRow("walking_turn_advances_both_heading_and_position", DisplayName = "Walking 90 degree corner")]
     [DataRow("duplicate_batch_is_idempotent", DisplayName = "Network duplicate protection")]

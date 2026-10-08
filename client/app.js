@@ -341,7 +341,7 @@ async function start(kind) {
     $('start').hidden = true;
     notice(
       kind === 'demo'
-        ? 'SYNTETISK DEMO · Gång, stopp, 180° vändning och retur. Inga riktiga sensorer används.'
+        ? 'SYNTETISK DEMO · Gång, stopp och 90° sväng. Inga riktiga sensorer används.'
         : kind === 'replay'
           ? 'REPLAY · Inspelade samples går genom samma pipeline som live.'
           : 'LIVE · Kalibrerar. Håll enheten stilla tills lägeskandidaten visas.',
