@@ -27,10 +27,10 @@
       </div>
       <p id="message" role="status">Sensorerna kräver HTTPS. Ingen GPS används.</p>
       <section class="calibration" aria-label="Stegkalibrering">
-        <strong>1. Kalibrera steglängden</strong>
+        <strong>Kalibrera steglängden (valfritt)</strong>
         <p>
-          Ange en känd sträcka. Gå sträckan medan appen räknar stegen, avsluta sedan för att börja
-          rita.
+          Appen startar med 0,76 m/steg. För egen kalibrering: ange en känd sträcka, gå sträckan och
+          avsluta för att fortsätta rita.
         </p>
         <label
           >Sträcka (meter)
@@ -48,7 +48,7 @@
         </div>
         <p>
           Kalibreringssteg: <b id="calibrationSteps">0</b> · Steglängd:
-          <b id="stride">Ej kalibrerad</b>
+          <b id="stride">0,76 m/steg</b>
         </p>
       </section>
       <section class="stats" aria-label="Mätning">
@@ -145,7 +145,7 @@
       </div>
       <p id="directionQuality" class="note" role="status">Färdriktning: inväntar gångmönster</p>
       <p class="note">
-        Sträckan räknas med din kalibrerade steglängd. Kartan visar relativ rörelse.
+        Sträckan räknas med vald steglängd, från start 0,76 m/steg. Kartan visar relativ rörelse.
         Telefonvridningar kan påverka spåret.
       </p>
       <details>

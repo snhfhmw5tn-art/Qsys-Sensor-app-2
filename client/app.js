@@ -4,8 +4,8 @@ import { LiveSensorSource } from './sources.js';
 import { LocalMapRenderer, orangeMarker } from './maps.js';
 const $ = (id) => document.getElementById(id);
 let adjustmentWindowMs = 700;
-let tracker = new WalkingTracker({ drawing: false, adjustmentWindowMs }),
-  calibratedLength = null,
+let tracker = new WalkingTracker({ stepLength: 0.76, adjustmentWindowMs }),
+  calibratedLength = 0.76,
   calibrating = false,
   calibrationMeters = 0,
   source = null,
@@ -17,7 +17,7 @@ const segments = [],
   statusEvents = [],
   markers = [];
 let build = null,
-  phase = 'waiting';
+  phase = 'walking';
 const openedAt = new Date().toISOString();
 let historyStartedAt = openedAt;
 function archiveSegment(nextPhase) {
@@ -125,7 +125,7 @@ async function connectSensors() {
     running = true;
     $('permission').hidden = true;
     $('status').textContent = 'Loggar';
-    message('Sensorerna är anslutna. Kalibrera steglängden innan kartan börjar ritas.');
+    message('Sensorerna är anslutna. Kartan ritas med 0,76 m/steg. Du kan kalibrera vid behov.');
   } catch (error) {
     source?.stop();
     source = null;
@@ -186,7 +186,7 @@ $('reset').onclick = () => {
   $('savedFile').removeAttribute('href');
   $('savedFile').textContent = '';
   tracker = new WalkingTracker({
-    stepLength: calibratedLength ?? 0.7,
+    stepLength: calibratedLength ?? 0.76,
     adjustmentWindowMs,
     drawing: calibratedLength !== null,
   });
@@ -198,7 +198,7 @@ $('reset').onclick = () => {
   message(
     running
       ? calibratedLength !== null
-        ? 'Ny karta. Ritningen fortsätter med kalibrerad steglängd.'
+        ? 'Ny karta. Ritningen fortsätter med vald steglängd.'
         : 'Kalibrera steglängden innan du börjar.'
       : 'Ny karta. Inväntar sensorbehörighet.',
   );
