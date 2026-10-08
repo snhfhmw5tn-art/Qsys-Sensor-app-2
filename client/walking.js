@@ -230,8 +230,15 @@ export class GaitStepDetector {
       f?.orientationReliable &&
       f.horizontalEnergy >= 0.012 &&
       f.horizontalEnergy >= f.energy * 0.015 &&
-      f.gyroRms < 100 &&
       this.validator.validate(recent, f);
+    // Rotation magnitude alone cannot reject gait: arm swing and pocket
+    // recordings exceed 100 deg/s. Require regular confirmed peaks instead.
+    if (f)
+      this.features = {
+        ...f,
+        confirmedGait: !!walking,
+        confirmedCadence: walking ? 2 / (recent[2].t - recent[0].t) : null,
+      };
     if (!walking) return [];
     const result = recent.filter((p) => p.t > this.lastApplied);
     if (result.length) this.lastApplied = result.at(-1).t;

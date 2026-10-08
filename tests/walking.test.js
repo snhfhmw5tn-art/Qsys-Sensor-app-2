@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WalkingTracker } from '../client/walking.js';
+import { GaitStepDetector, WalkingTracker } from '../client/walking.js';
 import { demoSamples } from '../client/sources.js';
 test('walking-only route counts steps locally and follows a turn', () => {
   const tracker = new WalkingTracker();
@@ -195,4 +195,28 @@ test('stale orientation carried by motion samples cannot rewind a rapid gyro tur
   tracker.detector = { update: () => [], features: null };
   tracker.process({ ...raw, t: 0.12, gyro: [0, 0, 0], orientationAge: 0.12 });
   assert.ok(Math.abs(tracker.state.deviceHeading - 90) < 1e-8);
+});
+
+test('regular gait with arm-swing or pocket gyro magnitude is not vetoed', () => {
+  for (const magnitude of [35, 130, 165]) {
+    const detector = new GaitStepDetector();
+    let steps = 0;
+    for (let i = 0; i < 500; i++) {
+      const t = i / 50;
+      const vertical = 3 * Math.sin(2 * Math.PI * 2 * t);
+      steps += detector.update({
+        t,
+        dt: 0.02,
+        vertical,
+        nav: [Math.cos(2 * Math.PI * 2 * t), 0, vertical],
+        norm: Math.hypot(1, vertical),
+        gyroMagnitude: magnitude,
+        yawRate: 0,
+        orientationReliable: true,
+      }).length;
+    }
+    assert.ok(steps >= 15);
+    assert.equal(detector.features.confirmedGait, true);
+    assert.ok(Math.abs(detector.features.confirmedCadence - 2) < 0.1);
+  }
 });

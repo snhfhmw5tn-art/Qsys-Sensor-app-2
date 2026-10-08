@@ -182,3 +182,35 @@ test('vertical spectrum separates 2 Hz gait-band and 8 Hz vibration signals', ()
     assert.ok(hz === 8 ? f.verticalHighFrequencyRatio > 0.9 : f.verticalHighFrequencyRatio < 0.1);
   }
 });
+
+test('small hand tremor remains standing despite autocorrelation', () => {
+  const f = {
+    ...quiet,
+    rms: 0.223,
+    gyroRms: 3.538,
+    periodicity: 0.646,
+    cadence: 1.56,
+    verticalAmplitude: 0.589,
+    horizontalEnergy: 0.015,
+  };
+  assert.equal(new ActivityEstimator().update(f, 0).mode, 'Standing');
+});
+test('confirmed regular footsteps can corroborate pocket impacts above 4 Hz', () => {
+  const f = {
+    ...quiet,
+    rms: 10,
+    gyroRms: 165,
+    periodicity: 0.9,
+    cadence: 3,
+    verticalAmplitude: 24,
+    horizontalEnergy: 50,
+    verticalHighFrequencyRatio: 0.72,
+    confirmedGait: true,
+    confirmedCadence: 2,
+  };
+  assert.equal(new ActivityEstimator().update(f, 0).mode, 'Walking');
+  assert.equal(
+    new ActivityEstimator().update({ ...f, confirmedGait: false, confirmedCadence: null }, 0).mode,
+    'Unknown',
+  );
+});

@@ -18,15 +18,17 @@ export class ActivityEstimator {
     const highSpeed = Number.isFinite(speed) && speed > 35 / 3.6;
     this.last = f;
     this.transport = transport;
-    const quiet = f.rms < 0.2 && f.gyroRms < 5;
+    const quiet =
+      f.rms < 0.3 && f.gyroRms < 5 && f.verticalAmplitude < 0.8 && f.horizontalEnergy < 0.04;
+    const cadence = f.confirmedCadence ?? f.cadence;
     const gait =
       f.periodicity >= 0.48 &&
       f.verticalAmplitude >= 1.1 &&
       f.horizontalEnergy >= 0.012 &&
-      f.cadence >= 0.8 &&
-      f.cadence <= 3.8 &&
-      (f.verticalHighFrequencyRatio ?? 0) < 0.65;
-    const running = gait && f.cadence >= 2.5 && f.rms >= 2;
+      cadence >= 0.8 &&
+      cadence <= 3.8 &&
+      ((f.verticalHighFrequencyRatio ?? 0) < 0.65 || f.confirmedGait === true);
+    const running = gait && cadence >= 2.5 && f.rms >= 2;
     const vehicle = !gait && f.horizontalEnergy >= 0.08 && f.periodicity < 0.4;
     let scores = quiet
       ? { Standing: 0.8, Walking: 0.03, Running: 0.01, Cart: 0.03, Forklift: 0.03, Unknown: 0.1 }
