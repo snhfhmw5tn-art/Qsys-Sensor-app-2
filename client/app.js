@@ -233,11 +233,7 @@ function updateDiagnostics() {
     s = pipeline.lastSample;
   set(
     'candidate',
-    pipeline.preprocessor.calibrated
-      ? `Kandidat: ${labels[pipeline.machine.candidate]}`
-      : pipeline.preprocessor.calibrationFailed
-        ? 'Håll telefonen stilla för kalibrering'
-        : 'Kalibrerar · håll enheten stilla',
+    `Kandidat: ${labels[pipeline.machine.candidate]}${pipeline.preprocessor.calibrated ? '' : ' · Bakgrundskalibrering'}`,
   );
   set('sampleRate', `${Math.round(f?.sampleRate ?? 0)} Hz`);
   set(
@@ -378,7 +374,7 @@ async function start(kind) {
         ? 'SYNTETISK DEMO · Gång, stopp och 90° sväng. Inga riktiga sensorer används.'
         : kind === 'replay'
           ? 'REPLAY · Inspelade samples går genom samma pipeline som live.'
-          : 'LIVE · Håll stilla cirka 0,6 sekunder, börja sedan gå. De första stegen verifieras automatiskt.',
+          : 'LIVE · Loggar direkt. Du kan börja gå; kalibrering sker i bakgrunden.',
     );
   } catch (e) {
     source?.stop();
@@ -694,6 +690,17 @@ async function restore() {
   }
 }
 await restore();
+// iOS permission APIs require a real tap; other supported browsers can start
+// directly. Never emulate a user gesture or bypass a browser permission.
+const needsSensorGesture = [globalThis.DeviceMotionEvent, globalThis.DeviceOrientationEvent].some(
+  (type) => typeof type?.requestPermission === 'function',
+);
+if (globalThis.isSecureContext && globalThis.DeviceMotionEvent && !needsSensorGesture) {
+  await start('live');
+} else if (needsSensorGesture) {
+  $('start').textContent = 'Tillåt sensorer och logga';
+  notice('Tryck för att tillåta sensorer. Loggningen börjar direkt utan stillakalibrering.');
+}
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && running)

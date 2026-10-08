@@ -430,7 +430,8 @@ export class SensorPipeline {
     this.raw.add(sample);
     const s = this.preprocessor.process(sample);
     this.lastSample = s;
-    if (!this.preprocessor.calibrated) return;
+    // Record and process immediately. Bias calibration is opportunistic in
+    // the background and must never discard movement at measurement start.
     this.window.add(s);
     if (s.t - this.lastFeatures >= C.featureInterval) {
       this.features = this.extractor.extract(this.window.samples);

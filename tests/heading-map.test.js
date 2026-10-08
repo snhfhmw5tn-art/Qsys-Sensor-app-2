@@ -9,6 +9,35 @@ import {
 } from '../client/pipeline.js';
 import { fitTrajectory, LocalMapRenderer } from '../client/maps.js';
 
+test('walking immediately logs and confirms steps without waiting for quiet calibration', () => {
+  const observations = [];
+  const p = new SensorPipeline((o) => observations.push(o), {
+    deviceId: 'immediate',
+    sessionId: 'immediate',
+  });
+  for (let i = 0; i < 200; i++) {
+    const t = i / 50,
+      wave = Math.sin(2 * Math.PI * 1.8 * t);
+    p.process({
+      t,
+      gravityAcceleration: [0.6 * wave, 0, 9.80665 + 2 * wave],
+      linearAcceleration: [0.6 * wave, 0, 2 * wave],
+      gyro: [0, 0, 0],
+      orientation: { alpha: 0, beta: 0, gamma: 0 },
+    });
+  }
+  assert.equal(p.preprocessor.calibrated, false, 'test must not acquire a quiet calibration');
+  assert.equal(p.raw.samples[0].t, 0);
+  assert.ok(
+    observations[0].monotonicTimestamp <= 0.22,
+    'first observation was held for calibration',
+  );
+  assert.ok(
+    observations.some((o) => o.steps?.length >= 3),
+    'initial gait was not confirmed',
+  );
+});
+
 test('a turn in the first walking steps survives delayed gait confirmation', () => {
   const observations = [];
   const p = new SensorPipeline((o) => observations.push(o), {
