@@ -7,7 +7,7 @@ export const config = Object.freeze({
   windowSeconds: 3,
   featureInterval: 0.25,
   rawBufferSeconds: 60,
-  calibrationSeconds: 2,
+  calibrationSeconds: 0.6,
   minStepInterval: 0.26,
   maxStepInterval: 1.2,
   stepThreshold: 0.65,

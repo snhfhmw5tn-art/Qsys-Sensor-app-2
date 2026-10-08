@@ -286,8 +286,16 @@ async function start(kind) {
   $('replay').disabled = true;
   // Live start executes permission APIs before any fetch awaits, preserving the user gesture.
   let pendingLive = null;
+  const startupEvents = [];
+  const bufferStartup = (event) => {
+    startupEvents.push(event);
+    if (startupEvents.length > 1500) startupEvents.shift();
+  };
   const sample = (s) => {
-    if (!pipeline) return;
+    if (!pipeline) {
+      bufferStartup({ sample: s });
+      return;
+    }
     recording.add(s);
     try {
       pipeline.process(s);
@@ -302,7 +310,10 @@ async function start(kind) {
     }
   };
   const gps = (g) => {
-    if (!pipeline) return;
+    if (!pipeline) {
+      bufferStartup({ gps: g });
+      return;
+    }
     recording.add({ ...g, kind: 'gps' });
     pipeline.gps(g);
   };
@@ -312,8 +323,9 @@ async function start(kind) {
     pendingLive.catch(() => {});
   }
   try {
-    if (pendingLive) await pendingLive;
-    await newSession();
+    notice('Startar sensorer och ansluter till servern…');
+    const results = await Promise.allSettled([pendingLive ?? Promise.resolve(), newSession()]);
+    for (const result of results) if (result.status === 'rejected') throw result.reason;
     recording = new SessionRecorder();
     recording.source = kind;
     recording.active = $('record').checked;
@@ -333,6 +345,11 @@ async function start(kind) {
         }),
       },
     );
+    for (const event of startupEvents) {
+      if (event.sample) sample(event.sample);
+      else gps(event.gps);
+    }
+    startupEvents.length = 0;
     if (kind !== 'live') {
       const samples = kind === 'demo' ? demoSamples() : loaded.samples;
       source = new ReplaySensorSource(samples, sample, gps, () => stop());
@@ -347,7 +364,7 @@ async function start(kind) {
         ? 'SYNTETISK DEMO · Gång, stopp och 90° sväng. Inga riktiga sensorer används.'
         : kind === 'replay'
           ? 'REPLAY · Inspelade samples går genom samma pipeline som live.'
-          : 'LIVE · Kalibrerar. Håll enheten stilla tills lägeskandidaten visas.',
+          : 'LIVE · Håll stilla cirka 0,6 sekunder, börja sedan gå. De första stegen verifieras automatiskt.',
     );
   } catch (e) {
     source?.stop();

@@ -4,8 +4,48 @@ import {
   HeadingEstimator,
   CoordinateTransformer,
   MotionFeatureExtractor,
+  SensorPreprocessor,
 } from '../client/pipeline.js';
 import { fitTrajectory, LocalMapRenderer } from '../client/maps.js';
+
+test('quiet sensor startup calibrates within 0.7 seconds', () => {
+  const p = new SensorPreprocessor();
+  for (let i = 0; i <= 35; i++)
+    p.process({
+      t: i / 50,
+      gravityAcceleration: [0, 0, 9.80665],
+      linearAcceleration: [0, 0, 0],
+      gyro: [0, 0, 0],
+    });
+  assert.equal(p.calibrated, true);
+});
+
+test('movement restarts the continuous quiet calibration interval', () => {
+  const p = new SensorPreprocessor();
+  for (let i = 0; i <= 25; i++)
+    p.process({
+      t: i / 50,
+      gravityAcceleration: [0, 0, 9.80665],
+      linearAcceleration: i === 25 ? [2, 0, 0] : [0, 0, 0],
+      gyro: [0, 0, 0],
+    });
+  for (let i = 26; i <= 45; i++)
+    p.process({
+      t: i / 50,
+      gravityAcceleration: [0, 0, 9.80665],
+      linearAcceleration: [0, 0, 0],
+      gyro: [0, 0, 0],
+    });
+  assert.equal(p.calibrated, false);
+  for (let i = 46; i <= 60; i++)
+    p.process({
+      t: i / 50,
+      gravityAcceleration: [0, 0, 9.80665],
+      linearAcceleration: [0, 0, 0],
+      gyro: [0, 0, 0],
+    });
+  assert.equal(p.calibrated, true);
+});
 
 test('touch and page scroll cannot silently disable automatic route fitting', () => {
   const previous = globalThis.ResizeObserver;

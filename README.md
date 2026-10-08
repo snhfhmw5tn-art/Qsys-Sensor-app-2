@@ -31,7 +31,7 @@ Servern lyssnar på LAN som standard. Mobilen måste kunna nå servern och lita 
 
 För extern webbserver finns nu ett automatiskt [serverpaket och publiceringsguide](docs/Deployment.md). Installationen på en specifik server kopplas in när serveradress och driftmiljö har bestämts.
 
-1. Öppna i mobilen, tryck Starta och tillåt rörelsesensorer; GPS är valfritt. Håll telefonen stilla under minst två sekunder tills kalibrering är klar.
+1. Öppna i mobilen, tryck Starta och tillåt rörelsesensorer; GPS är valfritt. Håll telefonen stilla cirka 0,6 sekunder. Starten ansluter till servern parallellt med sensorbehörigheterna och buffrar inkommande sensordata; de första stegen verifieras innan positionen uppdateras.
 2. Gå en känd sträcka och kontrollera steg, sträcka, confidence och trajectory. Kartan zoomar automatiskt så hela färdvägen syns. Autozoom är på vid varje ny mätning. Beröring och sidscroll stänger inte av den. Manuell zoom med +/− avmarkerar Autozoom; kryssrutan eller ◎ återaktiverar den. Grön pil och orange telefonsymbol visar telefonens relativa riktning. Färdvägen ritas separat med skattad rörelseriktning. Initial färdriktning är uppåt.
 3. För truck/sparkcykel: välj fordonstyp i diagnostik. Detta är en uttrycklig operatörsprior eftersom en generell IMU-regelmodell inte säkert kan identifiera undertypen. Återgå till Automatisk/gång vid avstigning. Bekräfta stillastående fordon endast när det verkligen står stilla.
 4. Stoppa efter kalibreringssträckan, ange faktiskt antal meter och välj gång/löpning. Faktor sparas lokalt och appliceras i nästa session. Börja med en ren session och en enda känd sträcka per modell. Kalibrering ändrar inte redan ackumulerad historik.

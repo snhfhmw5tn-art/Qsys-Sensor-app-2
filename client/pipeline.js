@@ -54,6 +54,7 @@ export class SensorPreprocessor {
     this.calibrated = false;
     this.initialT = null;
     this.calibrationFailed = false;
+    this.quietSince = null;
   }
   process(s) {
     const dt = this.previous ? clamp(s.t - this.previous.t, 0.001, 0.1) : 0.02;
@@ -66,10 +67,19 @@ export class SensorPreprocessor {
       norm = Math.hypot(...linear),
       gyro = s.gyro ?? [0, 0, 0];
     if (!this.calibrated) {
-      if (norm < C.stationaryRms * 3 && Math.hypot(...gyro) < C.stationaryGyro * 2)
+      if (norm < C.stationaryRms * 3 && Math.hypot(...gyro) < C.stationaryGyro * 2) {
+        this.quietSince ??= s.t;
         this.biasSamples.push(gyro);
-      else this.biasSamples = [];
-      if (this.biasSamples.length >= 20 && elapsed >= C.calibrationSeconds) {
+        this.biasSamples = this.biasSamples.slice(-200);
+      } else {
+        this.biasSamples = [];
+        this.quietSince = null;
+      }
+      if (
+        this.biasSamples.length >= 20 &&
+        this.quietSince !== null &&
+        s.t - this.quietSince >= C.calibrationSeconds
+      ) {
         this.bias = [0, 1, 2].map((i) => mean(this.biasSamples.map((v) => v[i])));
         this.calibrated = true;
       }
