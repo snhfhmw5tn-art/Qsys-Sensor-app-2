@@ -235,6 +235,9 @@ export class TravelDirection {
     this.phoneWindow = [];
     this.confidence = 0;
     this.corrections = [];
+    this.gaitOrigin = null;
+    this.stableAxes = [];
+    this.lastRecovery = null;
   }
   resetEvidence() {
     this.reference = null;
@@ -242,6 +245,8 @@ export class TravelDirection {
     this.turn = null;
     this.phoneWindow = [];
     this.confidence = 0;
+    this.stableAxes = [];
+    this.lastRecovery = null;
   }
   update(features, phoneHeading, t = this.time + 0.1) {
     this.time = t;
@@ -272,9 +277,37 @@ export class TravelDirection {
           heading: this.heading,
           t,
         };
+        this.gaitOrigin ??= { axis: this.reference.axis, heading: this.heading };
         this.confidence = 0.6;
       }
       return this.heading;
+    }
+    if (fresh) {
+      const strong = quiet && !this.turn && reliable && f.periodicity >= 0.8 && f.anisotropy >= 0.5;
+      if (strong) this.stableAxes.push({ t, axis: f.pcaHeading });
+      else this.stableAxes = [];
+      this.stableAxes = this.stableAxes.filter((p) => p.t >= t - 1.5);
+      if (this.stableAxes.length >= 8 && t - this.stableAxes[0].t >= 1) {
+        const n = this.stableAxes.length,
+          x = this.stableAxes.reduce((v, p) => v + Math.cos(radians(p.axis * 2)), 0),
+          y = this.stableAxes.reduce((v, p) => v + Math.sin(radians(p.axis * 2)), 0);
+        if (Math.hypot(x, y) / n > 0.95) {
+          const axis = (Math.atan2(y, x) * 90) / Math.PI;
+          if (this.corrections.length === 0) this.gaitOrigin = { axis, heading: this.heading };
+          let target = wrap(this.gaitOrigin.heading + axial(axis - this.gaitOrigin.axis));
+          if (Math.abs(wrap(target - this.heading)) > 90) target = wrap(target + 180);
+          const error = wrap(target - this.heading),
+            dt = Math.min(0.2, Math.max(0, t - (this.lastRecovery ?? t)));
+          if (Math.abs(error) <= 45 && Math.abs(error) > 3) {
+            this.heading = wrap(
+              this.heading + Math.max(-5 * dt, Math.min(5 * dt, error * (1 - Math.exp(-dt / 2.5)))),
+            );
+            this.reference.heading = this.heading;
+            this.confidence = 0.7;
+          }
+        }
+      }
+      this.lastRecovery = t;
     }
     const ref = this.reference,
       delta = wrap(phoneHeading - ref.phone);

@@ -218,3 +218,42 @@ test('retrospective green correction never mutates orange reference', () => {
   assert.ok(Math.abs(tracker.state.x - 1) < 1e-8);
   assert.ok(Math.abs(tracker.state.y + 1) < 1e-8);
 });
+test('stable gait slowly corrects residual post-turn angle without copying phone heading', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  const f = (axis) => ({
+    orientationReliable: true,
+    periodicity: 0.95,
+    anisotropy: 0.8,
+    horizontalEnergy: 0.2,
+    pcaHeading: axis,
+  });
+  for (let i = 0; i < 30; i++) p.update(f(10), 0, i * 0.1);
+  p.heading = 153;
+  p.reference = { axis: 10, phone: 180, heading: 153, t: 3 };
+  p.corrections.push({ start: 2, end: 3 });
+  let previous = p.heading;
+  for (let i = 0; i < 120; i++) {
+    p.update(f(10), 180, 3 + i * 0.1);
+    assert.ok(Math.abs(p.heading - previous) <= 0.501);
+    previous = p.heading;
+  }
+  assert.ok(p.heading > 174 && p.heading <= 180);
+});
+test('inconsistent gait cannot apply post-turn recovery', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  const f = (axis) => ({
+    orientationReliable: true,
+    periodicity: 0.95,
+    anisotropy: 0.8,
+    horizontalEnergy: 0.2,
+    pcaHeading: axis,
+  });
+  for (let i = 0; i < 30; i++) p.update(f(10), 0, i * 0.1);
+  p.heading = 153;
+  p.reference = { axis: 10, phone: 180, heading: 153, t: 3 };
+  p.corrections.push({ start: 2, end: 3 });
+  for (let i = 0; i < 100; i++) p.update(f(i % 2 ? 40 : -40), 180, 3 + i * 0.1);
+  assert.equal(p.heading, 153);
+});

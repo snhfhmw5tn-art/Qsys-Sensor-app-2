@@ -29,3 +29,5 @@ Grön riktning stabiliseras över flera gångfönster. Små ändringar av accele
 Svängdetekteringen fryser referensen vid påbörjad rotation och stöder även partiella och långsamma svängar. Svängar avslutas när rotationen stabiliserats med stöd av gångaxeln, med en 12-sekunders reservgräns från upptäckten. Efterhandskorrigering börjar vid rotationens upptäckta början. Orange referens ändras inte.
 
 Efter praktiskt test har den gröna TravelDirection återställts till ae22a4e. Senare nollställning av sensorhistorik och exportfunktioner är kvar. Orange referens är oförändrad.
+
+Efter en bekräftad sväng kan stabil gång korrigera kvarstående grön vinkelskillnad. Referensen lärs under stabil gång före första svängen. Efter svängen krävs minst åtta starka gångfönster över en sekund med liten axelspridning. Korrigeringen begränsas till fem grader per sekund, avvisar skillnader över 45 grader och ändrar inte orange referens eller tidigare steg.
