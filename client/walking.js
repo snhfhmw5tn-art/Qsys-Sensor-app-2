@@ -70,7 +70,7 @@ export class WalkingTracker {
     const s = this.preprocessor.process(raw);
     this.heading.update(s, null, 'Standing');
     const peaks = this.detector.update(s);
-    this.calculated.update(this.detector.features, this.heading.deviceYaw, s.t, peaks);
+    this.calculated.update(this.detector.features, this.heading.deviceYaw, s.t, peaks, s);
     this.history.push({
       t: s.t,
       phoneHeading: this.heading.deviceYaw,

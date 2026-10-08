@@ -37,6 +37,7 @@ function render() {
     following: 'Grönt: följer telefonen, ingen greppändring bekräftad.',
     checking: 'Grönt: kontrollerar ändrat grepp. Sträckan kan korrigeras i efterhand.',
     uncertain: 'Grönt: osäkert underlag, ingen ny kompensation.',
+    turning: 'Grönt: sväng registrerad med gyroskopet.',
     supported: 'Grönt: greppkompensation bekräftad.',
   };
   $('calculatedStatus').textContent = labels[s.calculatedStatus ?? 'waiting'];

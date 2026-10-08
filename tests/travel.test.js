@@ -59,3 +59,73 @@ test('one isolated shake or ambiguous reversal cannot confirm a mounting correct
   assert.equal(q.events.length, 0);
   assert.equal(q.status, 'uncertain');
 });
+
+function rawWalk(route, seconds, pose) {
+  for (let i = 0; i < seconds * 50; i++) {
+    const t = i / 50,
+      state = pose(t),
+      amplitude = Math.sin(4 * Math.PI * t);
+    const nav = [
+      Math.sin((state.axis * Math.PI) / 180) * amplitude,
+      Math.cos((state.axis * Math.PI) / 180) * amplitude,
+      0,
+    ];
+    const footfalls = i % 25 === 0 ? [{ t }] : [];
+    route.update(f(state.axis), state.phone, t, footfalls, {
+      t,
+      nav,
+      linear: nav,
+      orientationReliable: true,
+      orientation: { alpha: state.phone, beta: state.beta ?? 90, gamma: 0 },
+      yawRate: state.rate ?? 0,
+    });
+    if (footfalls.length) route.append(t, state.phone, (route.steps.length + 1) * 0.76);
+  }
+}
+test('raw two-step windows classify an arbitrary phone rotation and redraw green only', () => {
+  const p = new CompensatedRoute(0.76);
+  rawWalk(p, 12, (t) => ({
+    axis: 20,
+    phone: t < 4 ? 0 : t < 5 ? (t - 4) * 37 : 37,
+    beta: t < 4 ? 90 : t < 5 ? 90 - (t - 4) * 50 : 40,
+    rate: t >= 4 && t < 5 ? 37 : 0,
+  }));
+  assert.ok(p.decisions.some((d) => d.motion === 'hand-motion'));
+  assert.ok(p.decisions.some((d) => d.motion === 'position-transition'));
+  assert.ok(Math.abs(p.offset - 37) < 0.01);
+  assert.ok(Math.abs(p.trajectory.at(-1).x) < 0.1);
+  assert.equal(p.exportHistory().model, 'deng-2018-browser-adaptation-v1');
+  assert.ok(p.decisions.every((d) => Math.abs(d.seconds - 2 * d.period) < 1e-8));
+});
+test('a continuing raw gyro turn is accepted without waiting for the phone to settle', () => {
+  const p = new CompensatedRoute(0.76);
+  rawWalk(p, 10, (t) => {
+    const phone = t < 4 ? 0 : t < 8 ? (t - 4) * 22.5 : 90;
+    return { axis: 20 + phone, phone, rate: t >= 4 && t < 8 ? 22.5 : 0 };
+  });
+  assert.ok(p.decisions.some((d) => d.motion === 'turn'));
+  assert.ok(p.decisions.some((d) => d.motion === 'turn' && d.t < 7));
+  assert.ok(Math.abs(p.offset) < 0.01);
+  assert.ok(Math.abs(p.heading - 90) < 0.01);
+  assert.ok(p.trajectory.at(-1).x > 2);
+});
+test('a sensor gap discards stale reference and classification windows', () => {
+  const p = new CompensatedRoute(0.76);
+  rawWalk(p, 4, () => ({ axis: 20, phone: 0 }));
+  assert.ok(p.reference);
+  p.resetEvidence();
+  assert.equal(p.reference, null);
+  assert.equal(p.samples.length, 0);
+  assert.equal(p.pending, null);
+});
+
+test('normal per-step PCA can measure a changed gait axis independently of phone yaw', () => {
+  const p = new CompensatedRoute(0.76);
+  rawWalk(p, 10, (t) => ({ axis: t < 4 ? 20 : 35, phone: 0 }));
+  assert.ok(
+    p.steps.some((step) => step.motion === 'normal' && Math.abs(step.estimate - 15) < 0.01),
+  );
+  assert.ok(Math.abs(p.heading - 15) < 0.01);
+  assert.equal(p.offset, 0);
+  assert.ok(p.trajectory.at(-1).x > 1);
+});
