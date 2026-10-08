@@ -1,4 +1,4 @@
-const CACHE = 'qsys-motion-v31';
+const CACHE = 'qsys-motion-v32';
 const FILES = [
   '/',
   '/client/style.css',

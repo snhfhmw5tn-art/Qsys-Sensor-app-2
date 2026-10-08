@@ -49,6 +49,10 @@ export class WalkingTracker {
   correctGreenRoute() {
     const c = this.travel.correction;
     if (!c || !this.drawing) return;
+    for (const row of this.history) {
+      if (row.t >= c.start && row.t <= c.end && row.travelHeading !== undefined && c.headings)
+        row.travelHeading = interpolateHeading(c.headings, row.t);
+    }
     let x = 0,
       y = 0;
     for (let i = 1; i < this.state.trajectory.length; i++) {
@@ -76,6 +80,8 @@ export class WalkingTracker {
       state: this.state,
       greenDirection: {
         confidence: this.travel.confidence,
+        model: 'phone-heading-with-gait-mounting-offset',
+        mountingOffset: this.travel.offset,
         reference: this.travel.reference,
         turn: this.travel.turn,
         corrections: this.travel.corrections,
@@ -240,214 +246,137 @@ export function interpolateHeading(points, t) {
         (b.t === a.t ? 0 : Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t)))),
   );
 }
+// Phone heading drives the provisional route. Gait estimates only mounting changes.
 export class TravelDirection {
   constructor() {
     this.heading = 0;
+    this.offset = 0;
     this.time = 0;
-    this.last = null;
-    this.reference = null;
-    this.gaitOrigin = null;
-    this.turn = null;
-    this.initial = [];
-    this.axes = [];
-    this.phoneWindow = [];
-    this.confidence = 0;
+    this.confidence = 0.2;
     this.corrections = [];
-    this.poseUntil = 0;
-    this.previousGravity = null;
-    this.path = [];
-    this.turnOnset = null;
-    this.targetEvidence = [];
-    this.phoneTrace = [];
+    this.reference = null;
+    this.turn = null;
+    this.evidence = [];
+    this.phoneWindow = [];
+    this.trace = [];
   }
   resetEvidence() {
     this.reference = null;
-    this.gaitOrigin = null;
     this.turn = null;
-    this.initial = [];
-    this.axes = [];
+    this.evidence = [];
     this.phoneWindow = [];
-    this.confidence = 0;
-    this.previousGravity = null;
-    this.path = [];
-    this.turnOnset = null;
-    this.targetEvidence = [];
-    this.phoneTrace = [];
+    this.last = null;
+    this.confidence = 0.2;
   }
   update(f, phone, t = this.time + 0.1, sample) {
     this.time = t;
-    // A changing gravity direction in device axes indicates a grip/tilt change,
-    // rather than a yaw turn. Let the navigation-frame gait window settle.
-    if (sample?.orientation) {
-      const { beta, gamma } = sample.orientation,
-        b = radians(beta),
-        g = radians(gamma),
-        gravity = [-Math.cos(b) * Math.sin(g), Math.sin(b), Math.cos(b) * Math.cos(g)];
-      if (this.previousGravity) {
-        const dot = gravity.reduce((v, x, i) => v + x * this.previousGravity[i], 0);
-        if (dot < Math.cos(radians(2))) this.poseUntil = t + 0.6;
-      }
-      this.previousGravity = gravity;
-    }
-    this.phoneTrace.push({ t, phone });
-    this.phoneTrace = this.phoneTrace.filter((p) => p.t >= t - 12);
+    this.heading = wrap(phone - this.offset);
+    this.trace.push({ t, phone });
+    this.trace = this.trace.filter((p) => p.t >= t - 30);
     this.phoneWindow.push({ t, phone });
-    this.phoneWindow = this.phoneWindow.filter((p) => p.t >= t - 0.8);
+    this.phoneWindow = this.phoneWindow.filter((p) => p.t >= t - 0.6);
     const quiet =
       this.phoneWindow.length > 1 &&
-      t - this.phoneWindow[0].t >= 0.5 &&
-      this.phoneWindow.every((p) => Math.abs(wrap(p.phone - phone)) < 7);
-    if (this.reference && !this.turn && Math.abs(wrap(phone - this.reference.phone)) > 15)
-      this.turnOnset ??= { t: Math.max(0, t - 0.3), heading: this.heading };
-    if (this.turnOnset && quiet) this.turnOnset.end ??= t - 0.8;
+      t - this.phoneWindow[0].t >= 0.4 &&
+      this.phoneWindow.every((p) => Math.abs(wrap(p.phone - phone)) < 8);
+    if (this.reference && !this.turn && Math.abs(wrap(phone - this.reference.phone)) > 6) {
+      this.turn = {
+        start: Math.max(0, t - 0.3),
+        basePhone: this.reference.phone,
+        baseHeading: this.reference.heading,
+        axis: this.reference.axis,
+        uncertainty: this.reference.uncertainty ?? 0,
+        offset: this.offset,
+      };
+      this.evidence = [];
+    }
     if (!f || f === this.last) return this.heading;
     this.last = f;
     const reliable =
       f.orientationReliable &&
       f.periodicity >= 0.48 &&
       f.anisotropy >= 0.4 &&
-      f.horizontalEnergy >= 0.012 &&
-      t >= this.poseUntil;
+      f.horizontalEnergy >= 0.012;
     if (!reliable) {
+      this.evidence = [];
       this.confidence = 0.2;
-      this.axes = [];
-      this.targetEvidence = [];
       return this.heading;
     }
-    this.axes.push({ t, axis: f.pcaHeading });
-    this.axes = this.axes.filter((p) => p.t >= t - 0.6);
-    const mean = axisMean(this.axes);
+    this.evidence.push({ t, axis: f.pcaHeading });
+    this.evidence = this.evidence.filter((p) => p.t >= t - 2);
+    const mean = axisMean(this.evidence);
+    const stable =
+      this.evidence.length >= 12 && t - this.evidence[0].t >= 1.5 && mean.agreement > 0.94;
+    if (!quiet || !stable) {
+      this.confidence = 0.2;
+      return this.heading;
+    }
     if (!this.reference) {
-      this.initial.push({ t, axis: f.pcaHeading });
-      this.initial = this.initial.filter((p) => p.t >= t - 1.2);
-      if (this.initial.length >= 8 && t - this.initial[0].t >= 0.8) {
-        const init = axisMean(this.initial);
-        if (init.agreement > 0.9) {
-          this.reference = { axis: init.axis, phone, heading: this.heading, t };
-          this.gaitOrigin = { axis: init.axis, heading: this.heading };
-          this.startPhone = phone;
-          this.path = [{ t, heading: this.heading }];
-          this.confidence = 0.6;
-        }
-      }
+      this.reference = {
+        axis: mean.axis,
+        phone,
+        heading: this.heading,
+        t,
+        uncertainty: (Math.acos(Math.min(1, mean.agreement)) * 180) / Math.PI,
+      };
+      this.confidence = 0.6;
       return this.heading;
     }
-    const ref = this.reference,
-      rotation = wrap(phone - ref.phone),
-      axisDelta = axial(mean.axis - ref.axis);
-    // Stabilize the baseline before any turn, without following a changing grip.
-    if (
-      !this.turn &&
-      !this.corrections.length &&
-      quiet &&
-      Math.abs(wrap(phone - this.startPhone)) < 7 &&
-      mean.agreement > 0.95
-    ) {
-      ref.axis = wrap(ref.axis + 0.08 * axial(mean.axis - ref.axis));
-      this.gaitOrigin.axis = ref.axis;
-      ref.t = t;
-    }
-    if (
-      !this.turn &&
-      Math.abs(rotation) > 15 &&
-      Math.abs(axisDelta) > 12 &&
-      Math.abs(axial(axisDelta - rotation)) < 45 &&
-      mean.agreement > 0.5
-    ) {
-      this.turn = {
-        start: this.turnOnset?.t ?? this.phoneWindow[0].t - 0.6,
-        baseHeading: this.heading,
-        basePhone: ref.phone,
-        detectedAt: t,
-        axis: ref.axis,
-        headings: [{ t: this.turnOnset?.t ?? this.phoneWindow[0].t - 0.6, heading: this.heading }],
-      };
-    }
-    const origin = this.gaitOrigin ?? ref;
-    let target = wrap(origin.heading + axial(mean.axis - origin.axis));
-    // Gyro-backed phone rotation chooses the forward/backward branch only.
-    // The magnitude of green rotation always comes from navigation-frame gait.
-    const predicted = this.turn
-      ? wrap(this.turn.baseHeading + wrap(phone - this.turn.basePhone))
-      : this.heading;
-    if (Math.abs(wrap(target - predicted)) > 90) target = wrap(target + 180);
-    this.targetEvidence.push({ t, axis: target });
-    this.targetEvidence = this.targetEvidence.filter((p) => p.t >= t - 1.6);
-    const settledTarget =
-      this.targetEvidence.length >= 10 &&
-      t - this.targetEvidence[0].t >= 1.2 &&
-      this.targetEvidence.every((p) => Math.abs(wrap(p.axis - target)) < 15);
-    // A stable PCA window is not enough: require repeated, consistent gait windows.
-    if (this.turn && mean.agreement > 0.5 && settledTarget) {
-      const dt = Math.min(0.2, Math.max(0.01, t - (this.lastApplied ?? t - 0.1)));
-      this.heading = wrap(this.heading + (1 - Math.exp(-dt / 0.18)) * wrap(target - this.heading));
-      this.turn.headings.push({ t: Math.max(this.turn.start, t - 0.6), heading: this.heading });
-      const end = this.turnOnset?.end ?? t - 0.6;
-      const trace = this.phoneTrace.filter((p) => p.t >= this.turn.start && p.t <= end);
-      let previous = this.turn.basePhone,
-        total = 0;
-      const rotations = trace.map((p) => {
-        total += wrap(p.phone - previous);
-        previous = p.phone;
-        return { t: p.t, rotation: total };
-      });
-      // Once gait confirms the angle, place it at the recorded physical turn time.
-      const delta = wrap(this.heading - this.turn.baseHeading);
-      const turnDelta = delta + 360 * Math.round((total - delta) / 360);
-      const headings =
-        Math.abs(total) > 15
-          ? [
-              { t: this.turn.start, heading: this.turn.baseHeading },
-              ...rotations.map((p) => ({
-                t: p.t,
-                heading: wrap(this.turn.baseHeading + (p.rotation / total) * turnDelta),
-              })),
-            ]
-          : [...this.turn.headings];
-      this.correction = { start: this.turn.start, end: t, headings };
-
-      this.confidence = 0.75;
-      if (
-        (quiet &&
-          t - this.turn.detectedAt > 1 &&
-          mean.agreement > 0.95 &&
-          Math.abs(wrap(target - this.heading)) < 3) ||
-        t - this.turn.detectedAt > 10
-      ) {
-        this.corrections.push({ ...this.correction });
-        this.turn = null;
-        this.turnOnset = null;
-        // Keep the global gait origin while preparing evidence for the next turn.
-        ref.axis = mean.axis;
-        ref.heading = this.heading;
-        ref.phone = phone;
-        ref.t = t;
-      }
-    } else if (
-      !this.turn &&
-      this.corrections.length &&
-      quiet &&
-      mean.agreement > 0.95 &&
-      settledTarget
-    ) {
-      const error = wrap(target - this.heading),
-        dt = Math.min(0.2, Math.max(0, t - (this.lastApplied ?? t)));
-      if (Math.abs(error) < 45 && Math.abs(error) > 3)
-        this.heading = wrap(
-          this.heading + Math.max(-5 * dt, Math.min(5 * dt, error * (1 - Math.exp(-dt / 2.5)))),
-        );
+    if (!this.turn) {
+      // Learn normal gait variation only while the mounting reference is unchanged.
+      this.reference.axis = wrap(
+        this.reference.axis + 0.05 * axial(mean.axis - this.reference.axis),
+      );
+      this.reference.uncertainty = (Math.acos(Math.min(1, mean.agreement)) * 180) / Math.PI;
       this.confidence = 0.6;
-    } else if (!this.turn && quiet && Math.abs(axisDelta) < 12) {
-      // A settled phone-only rotation changes mounting offset, not travel.
-      this.settledSince ??= t;
-      if (t - this.settledSince > 0.5) {
-        ref.phone = phone;
-        ref.t = t;
-        this.settledSince = null;
-        this.turnOnset = null;
-      }
-    } else this.settledSince = null;
-    this.lastApplied = t;
+      return this.heading;
+    }
+    const turn = this.turn,
+      rotation = wrap(phone - turn.basePhone);
+    let gaitRotation = axial(mean.axis - turn.axis);
+    // A horizontal acceleration axis has a 180-degree ambiguity. Do not invent
+    // a mounting change for a reversal that cannot be distinguished from a U-turn.
+    const ambiguous = Math.abs(rotation) > 120 && Math.abs(gaitRotation) < 30;
+    if (!ambiguous && Math.abs(gaitRotation) < 12) gaitRotation = 0;
+    else if (Math.abs(wrap(gaitRotation - rotation)) > 90) gaitRotation = wrap(gaitRotation + 180);
+    const mismatch = wrap(rotation - gaitRotation);
+    if (
+      !ambiguous &&
+      Math.abs(mismatch) >
+        Math.max(8, turn.uncertainty, (Math.acos(Math.min(1, mean.agreement)) * 180) / Math.PI)
+    ) {
+      this.offset = wrap(turn.offset + mismatch);
+      this.heading = wrap(phone - this.offset);
+      const correction = {
+        start: turn.start,
+        end: t,
+        offset: this.offset,
+        reason: 'mounting-offset',
+        phoneRotation: rotation,
+        gaitRotation,
+        headings: this.trace
+          .filter((p) => p.t >= turn.start)
+          .map((p) => ({
+            t: p.t,
+            heading: wrap(
+              turn.baseHeading +
+                gaitRotation * Math.max(0, Math.min(1, wrap(p.phone - turn.basePhone) / rotation)),
+            ),
+          })),
+      };
+      this.correction = correction;
+      this.corrections.push(correction);
+    }
+    this.confidence = ambiguous ? 0.2 : 0.6;
+    this.reference = {
+      axis: mean.axis,
+      phone,
+      heading: this.heading,
+      t,
+      uncertainty: (Math.acos(Math.min(1, mean.agreement)) * 180) / Math.PI,
+    };
+    this.turn = null;
+    this.evidence = [];
     return this.heading;
   }
 }
