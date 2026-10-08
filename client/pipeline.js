@@ -82,7 +82,9 @@ export class SensorPreprocessor {
     this.filtered += (1 - Math.exp(-2 * Math.PI * C.gaitCutoff * dt)) * (vertical - this.filtered);
     const corrected = gyro.map((v, i) => v - this.bias[i]);
     // DeviceMotion alpha,beta,gamma are converted to x,y,z by LiveSensorSource.
-    const yawRate = corrected.reduce((sum, v, i) => sum + (v * g[i]) / gn, 0);
+    const yawRate = s.orientation
+      ? this.transformer.transform(corrected, s.orientation)[2]
+      : corrected.reduce((sum, v, i) => sum + (v * g[i]) / gn, 0);
     return {
       ...s,
       dt,
@@ -109,11 +111,12 @@ export class MotionFeatureExtractor extends IMotionFeatureExtractor {
     if (!first || last.t - first.t < 1) return null;
     const v = samples.map((s) => s.vertical),
       norm = samples.map((s) => s.norm),
-      mx = mean(samples.map((s) => s.nav[0])),
-      my = mean(samples.map((s) => s.nav[1]));
-    const xx = mean(samples.map((s) => (s.nav[0] - mx) ** 2)),
-      yy = mean(samples.map((s) => (s.nav[1] - my) ** 2)),
-      xy = mean(samples.map((s) => (s.nav[0] - mx) * (s.nav[1] - my)));
+      headingSamples = samples.filter((s) => s.t >= last.t - 1.2),
+      mx = mean(headingSamples.map((s) => s.nav[0])),
+      my = mean(headingSamples.map((s) => s.nav[1]));
+    const xx = mean(headingSamples.map((s) => (s.nav[0] - mx) ** 2)),
+      yy = mean(headingSamples.map((s) => (s.nav[1] - my) ** 2)),
+      xy = mean(headingSamples.map((s) => (s.nav[0] - mx) * (s.nav[1] - my)));
     const angle = 0.5 * Math.atan2(2 * xy, xx - yy),
       anisotropy = Math.hypot(xx - yy, 2 * xy) / (xx + yy + 1e-6);
     // Resample irregular browser events before computing autocorrelation.
@@ -325,44 +328,49 @@ export class HeadingEstimator {
     this.pcaOrigin = null;
     this.deviceYaw = 0;
     this.confidence = 0.3;
-    this.deviceOrigin = null;
     this.lastFeature = null;
+    this.mountingOffset = 0;
+    this.filteredDeviceYaw = 0;
+    this.initialized = false;
   }
   update(s, f, mode) {
-    const delta = s.yawRate * s.dt;
-    this.deviceYaw = wrap(this.deviceYaw + delta);
-    if (s.orientation) {
-      const matrix = new CoordinateTransformer().matrix(s.orientation);
-      // Upright phone: viewing direction is -Z. Flat phone: top edge is +Y.
-      const axis = Math.abs(matrix[2][1]) > 0.7 ? 2 : 1;
-      const sign = axis === 2 ? -1 : 1;
-      const x = sign * matrix[0][axis],
-        y = sign * matrix[1][axis];
-      if (Math.hypot(x, y) > 0.2) {
-        const bearing = wrap((Math.atan2(x, y) * 180) / Math.PI);
-        this.deviceOrigin ??= bearing;
-        this.deviceYaw = wrap(bearing - this.deviceOrigin);
-      }
-    }
+    // Relative physical rotation, never compass alpha. Navigation bearings are
+    // clockwise; the browser's gravity-projected angular rate is anticlockwise.
+    if (this.initialized) this.deviceYaw = wrap(this.deviceYaw - s.yawRate * s.dt);
+    this.initialized = true;
+    this.filteredDeviceYaw = wrap(
+      this.filteredDeviceYaw +
+        (1 - Math.exp(-s.dt / 0.35)) * wrap(this.deviceYaw - this.filteredDeviceYaw),
+    );
+    const pedestrian = family(mode) === 'Pedestrian';
     if (
       f &&
       family(mode) === 'Pedestrian' &&
       f.orientationReliable &&
       f.anisotropy > C.pcaAnisotropy &&
-      f.horizontalEnergy > 0.015 &&
+      f.horizontalEnergy > 0.005 &&
       f.periodicity > 0.35
     ) {
       this.pcaOrigin ??= f.pcaHeading;
       let target = wrap(f.pcaHeading - this.pcaOrigin);
       if (Math.abs(wrap(target - this.heading)) > 90) target = wrap(target + 180);
-      // Never integrate device rotation into travel heading. PCA is already in
-      // the navigation frame and therefore independent of how the phone is held.
+      // Learn the phone-to-travel offset from gait, rather than assuming they
+      // always share a direction. A short window limits turn latency.
       if (f !== this.lastFeature) {
         this.heading = wrap(this.heading + C.pcaGain * wrap(target - this.heading));
+        this.mountingOffset = wrap(this.heading - this.filteredDeviceYaw);
         this.lastFeature = f;
       }
       this.confidence = 0.6 * f.anisotropy;
-    } else this.confidence = Math.max(0.15, this.confidence - s.dt * 0.001);
+    } else {
+      if (pedestrian) {
+        const target = wrap(this.filteredDeviceYaw + this.mountingOffset);
+        this.heading = wrap(
+          this.heading + (1 - Math.exp(-s.dt / 0.2)) * wrap(target - this.heading),
+        );
+      }
+      this.confidence = Math.max(0.15, this.confidence - s.dt * 0.05);
+    }
     return this.heading;
   }
 }

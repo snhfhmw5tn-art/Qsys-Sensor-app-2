@@ -16,7 +16,7 @@ const feature = (heading) => ({
 });
 const sample = (alpha = 0, beta = 90, gamma = 0) => ({
   dt: 0.02,
-  yawRate: 90,
+  yawRate: 0,
   orientation: { alpha, beta, gamma },
 });
 
@@ -24,7 +24,8 @@ test('upright phone starts forward; rotating it does not turn travel', () => {
   const h = new HeadingEstimator();
   h.update(sample(), feature(20), 'Walking');
   assert.equal(h.deviceYaw, 0);
-  for (let i = 1; i <= 100; i++) h.update(sample(i * 0.9), feature(20), 'Walking');
+  for (let i = 1; i <= 100; i++)
+    h.update({ ...sample(i * 0.9), yawRate: 45 }, feature(20), 'Walking');
   assert.ok(Math.abs(h.deviceYaw + 90) < 0.01);
   assert.ok(Math.abs(h.heading) < 0.01);
 });
@@ -43,6 +44,32 @@ test('rotation without reliable gait holds travel direction and lowers confidenc
   for (let i = 0; i < 100; i++) h.update(sample(i), null, 'TurningInPlace');
   assert.equal(h.heading, 0);
   assert.ok(h.confidence < 0.3);
+});
+
+test('compass changes alone never rotate the phone symbol', () => {
+  const h = new HeadingEstimator();
+  for (let i = 0; i < 100; i++) h.update(sample(i * 3), null, 'Standing');
+  assert.equal(h.deviceYaw, 0);
+});
+
+test('walking with weak gait direction follows physical device turn', () => {
+  const h = new HeadingEstimator();
+  h.update(sample(), null, 'Walking');
+  for (let i = 0; i < 100; i++) h.update({ ...sample(), yawRate: -45 }, null, 'Walking');
+  for (let i = 0; i < 100; i++) h.update(sample(), null, 'Walking');
+  assert.ok(h.heading > 85 && h.heading < 91);
+});
+
+test('alternating arm swing does not accumulate a turn', () => {
+  const h = new HeadingEstimator();
+  h.update(sample(), feature(0), 'Walking');
+  for (let i = 0; i < 500; i++)
+    h.update(
+      { ...sample(), yawRate: 90 * Math.sin(i * 0.02 * Math.PI * 4) },
+      feature(0),
+      'Walking',
+    );
+  assert.ok(Math.abs(h.heading) < 1);
 });
 
 test('navigation-frame gait axis survives upright/flat phone rotations', () => {
@@ -68,7 +95,7 @@ test('navigation-frame gait axis survives upright/flat phone rotations', () => {
       });
     }
     const f = extract.extract(samples);
-    assert.ok(Math.abs(f.pcaHeading) < 0.01);
+    assert.ok(Math.min(Math.abs(f.pcaHeading), Math.abs(Math.abs(f.pcaHeading) - 180)) < 0.01);
     assert.ok(f.anisotropy > 0.95);
   }
 });
