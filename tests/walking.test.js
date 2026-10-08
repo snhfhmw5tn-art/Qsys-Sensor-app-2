@@ -299,3 +299,25 @@ test('successive right-angle turns retain the original gait coordinate reference
     assert.ok(Math.abs(Math.abs(p.heading) - (turn + 1) * 90) < 3);
   }
 });
+
+test('brief misleading post-turn gait cannot replace a confirmed U-turn', async () => {
+  const { TravelDirection } = await import('../client/walking.js');
+  const p = new TravelDirection();
+  const f = (axis) => ({
+    orientationReliable: true,
+    periodicity: 0.9,
+    anisotropy: 0.8,
+    horizontalEnergy: 0.2,
+    pcaHeading: axis,
+  });
+  let t = 0;
+  for (let i = 0; i < 30; i++, t += 0.1) p.update(f(20), 0, t);
+  for (let i = 1; i <= 20; i++, t += 0.1) p.update(f(20 - i * 9), -i * 9, t);
+  for (let i = 0; i < 40; i++, t += 0.1) p.update(f(20), -180, t);
+  assert.ok(Math.abs(Math.abs(p.heading) - 180) < 3);
+  const before = p.heading;
+  for (let i = 0; i < 8; i++, t += 0.1) p.update(f(150), -180, t);
+  assert.ok(Math.abs(p.heading - before) < 1);
+  for (let i = 0; i < 30; i++, t += 0.1) p.update(f(20), -180, t);
+  assert.ok(Math.abs(Math.abs(p.heading) - 180) < 3);
+});

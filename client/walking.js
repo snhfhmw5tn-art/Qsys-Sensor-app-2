@@ -256,6 +256,9 @@ export class TravelDirection {
     this.poseUntil = 0;
     this.previousGravity = null;
     this.path = [];
+    this.turnOnset = null;
+    this.targetEvidence = [];
+    this.phoneTrace = [];
   }
   resetEvidence() {
     this.reference = null;
@@ -267,6 +270,9 @@ export class TravelDirection {
     this.confidence = 0;
     this.previousGravity = null;
     this.path = [];
+    this.turnOnset = null;
+    this.targetEvidence = [];
+    this.phoneTrace = [];
   }
   update(f, phone, t = this.time + 0.1, sample) {
     this.time = t;
@@ -283,12 +289,17 @@ export class TravelDirection {
       }
       this.previousGravity = gravity;
     }
+    this.phoneTrace.push({ t, phone });
+    this.phoneTrace = this.phoneTrace.filter((p) => p.t >= t - 12);
     this.phoneWindow.push({ t, phone });
     this.phoneWindow = this.phoneWindow.filter((p) => p.t >= t - 0.8);
     const quiet =
       this.phoneWindow.length > 1 &&
       t - this.phoneWindow[0].t >= 0.5 &&
       this.phoneWindow.every((p) => Math.abs(wrap(p.phone - phone)) < 7);
+    if (this.reference && !this.turn && Math.abs(wrap(phone - this.reference.phone)) > 15)
+      this.turnOnset ??= { t: Math.max(0, t - 0.3), heading: this.heading };
+    if (this.turnOnset && quiet) this.turnOnset.end ??= t - 0.8;
     if (!f || f === this.last) return this.heading;
     this.last = f;
     const reliable =
@@ -300,6 +311,7 @@ export class TravelDirection {
     if (!reliable) {
       this.confidence = 0.2;
       this.axes = [];
+      this.targetEvidence = [];
       return this.heading;
     }
     this.axes.push({ t, axis: f.pcaHeading });
@@ -343,12 +355,12 @@ export class TravelDirection {
       mean.agreement > 0.5
     ) {
       this.turn = {
-        start: this.phoneWindow[0].t - 0.6,
+        start: this.turnOnset?.t ?? this.phoneWindow[0].t - 0.6,
         baseHeading: this.heading,
         basePhone: ref.phone,
         detectedAt: t,
         axis: ref.axis,
-        headings: [{ t: this.phoneWindow[0].t - 0.6, heading: this.heading }],
+        headings: [{ t: this.turnOnset?.t ?? this.phoneWindow[0].t - 0.6, heading: this.heading }],
       };
     }
     const origin = this.gaitOrigin ?? ref;
@@ -359,25 +371,65 @@ export class TravelDirection {
       ? wrap(this.turn.baseHeading + wrap(phone - this.turn.basePhone))
       : this.heading;
     if (Math.abs(wrap(target - predicted)) > 90) target = wrap(target + 180);
-    if (this.turn && mean.agreement > 0.5) {
+    this.targetEvidence.push({ t, axis: target });
+    this.targetEvidence = this.targetEvidence.filter((p) => p.t >= t - 1.6);
+    const settledTarget =
+      this.targetEvidence.length >= 10 &&
+      t - this.targetEvidence[0].t >= 1.2 &&
+      this.targetEvidence.every((p) => Math.abs(wrap(p.axis - target)) < 15);
+    // A stable PCA window is not enough: require repeated, consistent gait windows.
+    if (this.turn && mean.agreement > 0.5 && settledTarget) {
       const dt = Math.min(0.2, Math.max(0.01, t - (this.lastApplied ?? t - 0.1)));
       this.heading = wrap(this.heading + (1 - Math.exp(-dt / 0.18)) * wrap(target - this.heading));
       this.turn.headings.push({ t: Math.max(this.turn.start, t - 0.6), heading: this.heading });
-      this.correction = { start: this.turn.start, end: t - 0.6, headings: [...this.turn.headings] };
+      const end = this.turnOnset?.end ?? t - 0.6;
+      const trace = this.phoneTrace.filter((p) => p.t >= this.turn.start && p.t <= end);
+      let previous = this.turn.basePhone,
+        total = 0;
+      const rotations = trace.map((p) => {
+        total += wrap(p.phone - previous);
+        previous = p.phone;
+        return { t: p.t, rotation: total };
+      });
+      // Once gait confirms the angle, place it at the recorded physical turn time.
+      const delta = wrap(this.heading - this.turn.baseHeading);
+      const turnDelta = delta + 360 * Math.round((total - delta) / 360);
+      const headings =
+        Math.abs(total) > 15
+          ? [
+              { t: this.turn.start, heading: this.turn.baseHeading },
+              ...rotations.map((p) => ({
+                t: p.t,
+                heading: wrap(this.turn.baseHeading + (p.rotation / total) * turnDelta),
+              })),
+            ]
+          : [...this.turn.headings];
+      this.correction = { start: this.turn.start, end: t, headings };
+
       this.confidence = 0.75;
       if (
-        (quiet && t - this.turn.detectedAt > 1 && mean.agreement > 0.95) ||
+        (quiet &&
+          t - this.turn.detectedAt > 1 &&
+          mean.agreement > 0.95 &&
+          Math.abs(wrap(target - this.heading)) < 3) ||
         t - this.turn.detectedAt > 10
       ) {
         this.corrections.push({ ...this.correction });
         this.turn = null;
+        this.turnOnset = null;
         // Keep the global gait origin while preparing evidence for the next turn.
         ref.axis = mean.axis;
         ref.heading = this.heading;
         ref.phone = phone;
         ref.t = t;
       }
-    } else if (this.corrections.length && quiet && mean.agreement > 0.95) {
+    } else if (
+      !this.turn &&
+      this.corrections.length &&
+      quiet &&
+      mean.agreement > 0.95 &&
+      settledTarget
+    ) {
       const error = wrap(target - this.heading),
         dt = Math.min(0.2, Math.max(0, t - (this.lastApplied ?? t)));
       if (Math.abs(error) < 45 && Math.abs(error) > 3)
@@ -392,6 +444,7 @@ export class TravelDirection {
         ref.phone = phone;
         ref.t = t;
         this.settledSince = null;
+        this.turnOnset = null;
       }
     } else this.settledSince = null;
     this.lastApplied = t;
