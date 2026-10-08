@@ -44,6 +44,16 @@ function render() {
   $('compassValue').textContent = compass ? compassLabel(compass.heading) : 'Data saknas';
   $('phoneArrow').setAttribute('transform', 'rotate(' + s.deviceHeading + ' 110 110)');
   $('phoneValue').textContent = Math.round(s.deviceHeading) + '° från start';
+  $('travelArrow').setAttribute('transform', 'rotate(' + s.heading + ' 110 110)');
+  $('travelArrow').setAttribute(
+    'stroke-dasharray',
+    s.directionQuality === 'supported' ? 'none' : '5 4',
+  );
+  $('travelValue').textContent =
+    Math.round(s.heading) +
+    '° från start' +
+    (s.directionQuality === 'supported' ? '' : ' · osäker');
+
   $('gyroArrow').setAttribute('transform', 'rotate(' + gyroHeading + ' 110 110)');
   $('gyroArrow').style.display = gyroAvailable ? '' : 'none';
   $('gyroValue').textContent = gyroAvailable

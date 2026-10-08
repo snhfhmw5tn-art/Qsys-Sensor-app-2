@@ -118,6 +118,23 @@
           <p id="gyroValue">Data saknas</p>
         </div>
         <div class="sensor-card">
+          <h2>Beräknad färdriktning</h2>
+          <svg viewBox="0 0 220 220" role="img" aria-label="Beräknad färdriktning relativt start">
+            <circle cx="110" cy="110" r="90" fill="none" stroke="#36515e" />
+            <text x="110" y="16" text-anchor="middle" fill="#b0c5ce" font-size="12">START 0°</text>
+            <g id="travelArrow">
+              <path
+                d="M110 110V44 M99 59L110 42L121 59"
+                fill="none"
+                stroke="#56e2c9"
+                stroke-width="5"
+              />
+            </g>
+            <circle cx="110" cy="110" r="4" fill="#fff" />
+          </svg>
+          <p id="travelValue">0° från start · osäker</p>
+        </div>
+        <div class="sensor-card">
           <h2>Accelerometer · g-krafter</h2>
           <svg
             viewBox="0 0 220 220"
